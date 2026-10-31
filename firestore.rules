@@ -1,0 +1,176 @@
+rules_version = '2';
+// Rise Edge Academy - Firestore rules.
+// Roles: admin (everything) | co-admin = a teacher profile with ca:true (everything except fees, salary and a few admin-only fields)
+//        teacher (only the batches in users/<id>.bids) | student (only his own batch and his own records).
+// Every get()/exists() in a rule is one billed read, so the helper functions below are kept short.
+service cloud.firestore {
+  match /databases/{d}/documents {
+
+    // ---------- who is asking ----------
+    // After an admin password reset the login uid differs from the profile id: map/<uid> = {sid: <profile id>}.
+    function sid() { return exists(/databases/$(d)/documents/map/$(request.auth.uid)) ? get(/databases/$(d)/documents/map/$(request.auth.uid)).data.sid : request.auth.uid; }
+    function me() { return get(/databases/$(d)/documents/users/$(sid())).data; }
+    function adm() { return request.auth != null && me().role == 'admin'; }
+    function cadm() { return request.auth != null && (me().role == 'admin' || (me().role == 'teacher' && me().get('ca', false) == true && me().get('active', true) != false)); }
+    function apd() { return me().get('ap', true) != false; }
+    function myb() { return apd() ? me().get('bid', '') : ''; }
+    function tch(b) { return request.auth != null && me().role == 'teacher' && me().get('ap', true) != false && me().get('active', true) != false && b in me().bids; }
+    function tpub() { return me().get('pub', false) == true; }
+    function fresh() { return !exists(/databases/$(d)/documents/config/init); }
+    function regOpen() { return !exists(/databases/$(d)/documents/config/reg) || get(/databases/$(d)/documents/config/reg).data.get('open', true) != false; }
+
+    // ---------- self registration (a student / teacher creates his own, not yet approved, profile) ----------
+    function ss(u, k) { return u.get(k, '') is string && u.get(k, '').size() < 300; }
+    function selfCommon(u) { return u.active == true && u.mustChange == false && u.name is string && u.name.size() > 0 && u.name.size() < 100 && ss(u, 'nick') && ss(u, 'phone') && ss(u, 'addr') && ss(u, 'email'); }
+    function selfStu(u) { return selfCommon(u) && u.role == 'student' && u.keys().hasOnly(['role', 'name', 'nick', 'roll', 'bid', 'cls', 'school', 'grp', 'phone', 'addr', 'email', 'gphone', 'gem', 'active', 'mustChange', 'ap']) && u.ap == false && u.roll is string && u.roll.matches('REAS-[0-9]{4}-[0-9]{3,6}') && (u.bid == '' || (exists(/databases/$(d)/documents/batches/$(u.bid)) && get(/databases/$(d)/documents/batches/$(u.bid)).data.get('cls', '') == u.get('cls', '') && get(/databases/$(d)/documents/batches/$(u.bid)).data.get('grp', '') == u.get('grp', ''))) && u.get('cls', '') in ['', '4', '5', '6', '7', '8', '9', '10', '11', '12'] && u.get('grp', '') in ['', 'Science', 'Commerce', 'Arts'] && ss(u, 'school') && ss(u, 'gphone') && ss(u, 'gem'); }
+    function selfTch(u) { return selfCommon(u) && u.role == 'teacher' && u.keys().hasOnly(['role', 'name', 'nick', 'roll', 'subject', 'phone', 'addr', 'email', 'bids', 'cls', 'active', 'mustChange', 'ap']) && u.ap == false && u.roll is string && u.roll.matches('REAT-[0-9]{4}-[0-9]{3,6}') && u.bids is list && u.bids.size() == 0 && ss(u, 'subject') && ss(u, 'cls'); }
+
+    // ---------- admin: everything. co-admin: everything except these ----------
+    match /{c}/{id} {
+      allow read, write: if adm() || (cadm() && c != 'users' && c != 'log' && c != 'batches' && !(c in ['pay', 'pr', 'pi', 'bf', 'sal']));
+    }
+
+    // ---------- settings ----------
+    match /config/{id} {
+      allow read: if id != 'mail' || request.auth != null;
+      allow create: if request.auth != null && fresh();   // first-time setup only
+    }
+    match /cn/{id} {   // roll number counters
+      allow read: if true;
+      allow create: if request.auth != null && regOpen() && id.matches('[ST][0-9]{4}') && request.resource.data.keys().hasOnly(['n']) && request.resource.data.n is int && request.resource.data.n >= 1 && request.resource.data.n <= 100000;
+      allow update: if request.auth != null && regOpen() && request.resource.data.keys().hasOnly(['n']) && request.resource.data.n is int && request.resource.data.n > resource.data.n && request.resource.data.n <= resource.data.n + 1000;
+    }
+    match /login/{id} {   // roll -> login email(s)
+      allow read: if true;
+      allow create: if request.auth != null && regOpen() && request.auth.token.email == id + '@rise.local' && request.resource.data.keys().hasOnly(['es']) && request.resource.data.es == [request.auth.token.email];
+    }
+    match /map/{id} { allow read: if request.auth != null && request.auth.uid == id; }
+    match /fp/{id} {   // "forgot password" request from the sign-in page
+      allow create: if request.resource.data.st == 'new' && request.resource.data.keys().hasOnly(['roll', 'name', 'phone', 'st', 't']) && request.resource.data.roll is string && request.resource.data.roll.size() < 30 && request.resource.data.name is string && request.resource.data.name.size() < 100 && request.resource.data.phone is string && request.resource.data.phone.size() < 30;
+    }
+    match /reg/{id} {   // log of self registrations
+      allow create: if request.resource.data.st in ['pending', 'auto'] && request.resource.data.role in ['student', 'teacher'] && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() < 100 && request.resource.data.keys().hasOnly(['role', 'name', 'cls', 'school', 'grp', 'phone', 'email', 'addr', 'subject', 'nick', 'gphone', 'gem', 'st', 't', 'roll', 'bn']);
+    }
+
+    // ---------- people ----------
+    match /users/{id} {
+      allow read: if cadm();
+      allow create: if cadm() && request.resource.data.role in ['student', 'teacher'] && request.resource.data.get('ca', false) == false && request.resource.data.get('fo', 0) == 0;
+      allow delete: if cadm() && resource.data.role in ['student', 'teacher'] && resource.data.get('ca', false) == false;
+      allow update: if cadm() && resource.data.role != 'admin' && request.resource.data.role == resource.data.role && request.resource.data.get('ca', false) == resource.data.get('ca', false) && request.resource.data.get('fo', 0) == resource.data.get('fo', 0);
+      allow read: if request.auth != null && sid() == id;
+      allow read: if tch(resource.data.bid);
+      allow create: if request.auth != null && sid() == id && fresh() && request.resource.data.role == 'admin';   // first admin
+      allow create: if request.auth != null && request.auth.uid == id && regOpen() && (selfStu(request.resource.data) || selfTch(request.resource.data)) && request.auth.token.email == request.resource.data.roll.lower() + '@rise.local';
+      allow update: if request.auth != null && sid() == id && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['mustChange', 'pic', 'phone', 'addr', 'gname', 'gphone', 'bg', 'name', 'gem']);
+    }
+    match /batches/{id} {
+      allow read: if true;
+      allow update: if tch(id) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['start']);
+      allow create: if cadm() && !('fee' in request.resource.data);
+      allow update: if cadm() && request.resource.data.get('fee', 0) == resource.data.get('fee', 0);
+      allow delete: if cadm();
+    }
+    match /log/{id} {
+      allow read: if cadm();
+      allow create: if cadm() && request.resource.data.uid == sid();
+    }
+
+    // ---------- class work (teacher: own batches) ----------
+    match /att/{id} {
+      allow get: if tch(id.split('_')[0]);
+      allow list: if tch(resource.data.bid);
+      allow create: if tch(request.resource.data.bid);
+      allow update, delete: if tch(resource.data.bid);
+    }
+    match /exams/{id} {
+      allow read: if tch(resource.data.bid);
+      allow create: if tch(request.resource.data.bid) && (tpub() || request.resource.data.get('pub', false) == false);
+      allow update: if tch(resource.data.bid) && tch(request.resource.data.bid) && (tpub() || request.resource.data.get('pub', false) == resource.data.get('pub', false));
+    }
+    match /hw/{id} {
+      allow read: if request.auth != null && resource.data.bid == myb();
+      allow read: if tch(resource.data.bid);
+      allow create: if tch(request.resource.data.bid);
+      allow update: if tch(resource.data.bid) && tch(request.resource.data.bid);
+    }
+    match /rt/{id} { allow read: if request.auth != null && (tch(id) || myb() == id); }   // class routine, written by admin / co-admin
+    // monthly numbers + ranks of a batch: ONE document that students read (the app writes it after attendance / marks / homework)
+    match /bstat/{id} {
+      allow read: if request.auth != null && (tch(id) || myb() == id);
+      allow create, update: if tch(id) && request.resource.data.bid == id;
+    }
+    // syllabus: teachers only tick "finished in class" (done); topics and extra subjects are admin / co-admin
+    match /sd/{id} {
+      allow read: if request.auth != null && (tch(id) || myb() == id);
+      allow create: if tch(id) && request.resource.data.keys().hasOnly(['bid', 'done']);
+      allow update: if tch(id) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['bid', 'done']);
+    }
+    match /ms/{id} {   // student's own "I am confident" ticks
+      allow read: if request.auth != null && sid() == id && apd();
+      allow read: if tch(resource.data.bid);
+      allow create, update: if request.auth != null && apd() && sid() == id && request.resource.data.sid == id && request.resource.data.bid == myb();
+    }
+
+    // ---------- results and reports ----------
+    match /rep/{id} {
+      allow get: if tch(id.split('_')[0]);
+      allow create, update: if tch(request.resource.data.bid);
+    }
+    match /records/{id} {
+      allow read: if tch(resource.data.bid);
+      allow create: if tch(request.resource.data.bid);
+    }
+    match /yr/{id} {   // yearly / monthly result sheet (poster)
+      allow get: if tch(id.split('_')[0]);
+      allow read: if request.auth != null && resource.data.pub == true && resource.data.bid == myb();
+      allow create, update: if tch(request.resource.data.bid) && tpub();
+    }
+    match /users/{id}/reports/{r} {
+      allow read: if request.auth != null && sid() == id && apd();
+      allow write: if cadm() || tpub() && tch(get(/databases/$(d)/documents/users/$(id)).data.bid);
+    }
+    match /users/{id}/hist/{h} {
+      allow read: if request.auth != null && sid() == id && apd();
+      allow create: if cadm() || tch(get(/databases/$(d)/documents/users/$(id)).data.bid);
+    }
+
+    // ---------- notices, requests, files ----------
+    match /nt/{id} {
+      allow read: if request.auth != null && resource.data.to == sid() && apd();
+      allow read: if request.auth != null && resource.data.to == 'batch' && resource.data.bid == myb();
+      allow read: if resource.data.to == 'batch' && tch(resource.data.bid);
+      allow create: if tch(request.resource.data.bid) && request.resource.data.to in ['batch', 'admin'];
+      allow create: if tch(get(/databases/$(d)/documents/users/$(request.resource.data.to)).data.get('bid', ''));
+    }
+    match /rq/{id} {
+      allow read: if request.auth != null && resource.data.sid == sid() && apd();
+      allow read: if resource.data.h == 't' && tch(resource.data.bid);
+      allow create: if request.auth != null && request.resource.data.sid == sid() && request.resource.data.st == 'new' && request.resource.data.bid == myb();
+      allow update: if resource.data.h == 't' && tch(resource.data.bid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['st', 'rp']);
+    }
+    match /fl/{id} {   // suggestions / exam solutions / homework files
+      allow read: if request.auth != null && resource.data.bid == myb();
+      allow read: if tch(resource.data.bid);
+      allow create: if tch(request.resource.data.bid);
+    }
+    match /fd/{id} {   // the file pieces (a teacher may only clean up an upload that failed half way)
+      allow read: if request.auth != null && resource.data.bid == myb();
+      allow read: if tch(resource.data.bid);
+      allow create: if tch(request.resource.data.bid);
+      allow delete: if tch(resource.data.bid);
+    }
+
+    // ---------- money (admin only; the student sees his own) ----------
+    match /pay/{id} { allow read: if request.auth != null && resource.data.sid == sid() && apd(); }
+    match /bf/{id} { allow read: if request.auth != null && resource.data.bid == myb(); }
+    match /sal/{id} { allow read: if request.auth != null && resource.data.tid == sid() && apd(); }
+    match /pr/{id} {
+      allow read: if request.auth != null && resource.data.sid == sid() && apd();
+      allow create: if request.auth != null && request.resource.data.sid == sid() && request.resource.data.st == 'new' && request.resource.data.bid == myb() && request.resource.data.k in ['cash', 'online'] && request.resource.data.m is string && request.resource.data.m.matches('[0-9]{4}-[0-9]{2}') && request.resource.data.amt is number && request.resource.data.amt > 0 && request.resource.data.get('tx', '') is string && request.resource.data.get('tx', '').size() <= 60 && request.resource.data.keys().hasOnly(['sid', 'name', 'roll', 'bid', 'm', 'amt', 'k', 'tx', 'st', 't', 'hi']);
+    }
+    match /pi/{id} {   // payment screenshot
+      allow create: if request.auth != null && apd() && request.resource.data.sid == sid() && get(/databases/$(d)/documents/pr/$(id)).data.sid == sid() && request.resource.data.keys().hasOnly(['sid', 'img']) && request.resource.data.img is string && request.resource.data.img.size() < 700000;
+    }
+  }
+}

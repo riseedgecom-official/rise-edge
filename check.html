@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="bn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rise Edge – Setup check</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #07122c; color: #eaf1ff; font: 16px/1.5 system-ui, "Anek Bangla", sans-serif; padding: 20px 16px 40px; }
+  main { max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  p.s { color: #9db2d8; margin: 0 0 18px; }
+  .r { border: 1.5px solid #243b6b; border-radius: 12px; padding: 12px 14px; margin: 0 0 10px; background: #0b1c44; }
+  .r b { display: block; }
+  .r span { color: #9db2d8; font-size: 14px; word-break: break-word; }
+  .ok { border-color: #1f9d63; } .ok b::before { content: "✔ "; color: #35d08a; }
+  .no { border-color: #d6294a; } .no b::before { content: "✘ "; color: #ff6b87; }
+  .wa { border-color: #f2b01e; } .wa b::before { content: "! "; color: #f2b01e; }
+  .go { border-color: #243b6b; } .go b::before { content: "… "; }
+  a { color: #6fb0ff; }
+  button { font: inherit; padding: 10px 16px; border-radius: 10px; border: 0; background: #1469e8; color: #fff; font-weight: 700; margin-top: 8px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Rise Edge – সেটআপ চেক</h1>
+  <p class="s">এই পেজ দেখায় আপনার Firebase সেটআপ ঠিক আছে কিনা। লাল (✘) লেখাগুলো ঠিক করুন, তারপর “আবার চেক করুন” চাপুন।</p>
+  <div id="out"></div>
+  <button onclick="location.reload()">আবার চেক করুন</button>
+  <p class="s" style="margin-top:18px"><a href="./">← অ্যাপে ফিরুন</a></p>
+</main>
+<script type="module">
+const out = document.getElementById("out");
+const add = (cls, title, text) => { const d = document.createElement("div"); d.className = "r " + cls; d.innerHTML = "<b></b><span></span>"; d.firstChild.textContent = title; d.lastChild.textContent = text || ""; out.appendChild(d); return d; };
+const set = (d, cls, title, text) => { d.className = "r " + cls; d.firstChild.textContent = title; d.lastChild.textContent = text || ""; };
+
+let cfg;
+try { ({ cfg } = await import("./config.js")); } catch (e) { add("no", "config.js খুলছে না", String(e && e.message || e)); throw e; }
+const miss = ["apiKey", "authDomain", "projectId", "appId"].filter((k) => !cfg[k] || /PASTE|YOUR_/i.test(cfg[k]));
+if (miss.length) { add("no", "config.js এ Firebase এর মান বসানো হয়নি", "এগুলো ফাঁকা বা PASTE_ লেখা আছে: " + miss.join(", ") + "। README এর ধাপ ৩ দেখুন।"); }
+else add("ok", "config.js ঠিক আছে", "প্রজেক্ট: " + cfg.projectId);
+if (miss.length) throw new Error("config");
+
+add("ok", "এই ঠিকানা", location.origin + location.pathname);
+
+const A = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js");
+const AU = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js");
+const FS = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
+const app = A.initializeApp(cfg);
+
+// 1. Authentication
+const a = add("go", "লগইন সিস্টেম (Authentication) দেখা হচ্ছে…");
+try {
+  await AU.signInWithEmailAndPassword(AU.getAuth(app), "check-only@rise.local", "not-a-real-password");
+  set(a, "wa", "অপ্রত্যাশিত: টেস্ট লগইন সফল হয়েছে", "এটা হওয়ার কথা নয়।");
+} catch (e) {
+  const c = e && e.code || "";
+  if (/invalid-credential|user-not-found|wrong-password|invalid-email/.test(c)) set(a, "ok", "Authentication কাজ করছে", "Email/Password সাইন-ইন চালু আছে।");
+  else if (/operation-not-allowed/.test(c)) set(a, "no", "Email/Password সাইন-ইন বন্ধ আছে", "Firebase > Authentication > Sign-in method > Email/Password চালু করুন।");
+  else if (/api-key/.test(c)) set(a, "no", "apiKey ভুল", "config.js এ Firebase থেকে কপি করা apiKey ঠিকমতো বসান।");
+  else if (/unauthorized-domain|requests-from-referer|referer/.test(c + (e.message || ""))) set(a, "no", "এই ওয়েবসাইট Firebase এ অনুমোদিত নয়", "Firebase > Authentication > Settings > Authorized domains এ \"" + location.hostname + "\" যোগ করুন।");
+  else if (/network/.test(c)) set(a, "no", "ইন্টারনেটে সমস্যা", "ইন্টারনেট ঠিক আছে কিনা দেখুন।");
+  else set(a, "wa", "Authentication: " + c, e.message || "");
+}
+
+// 2. Firestore + rules
+const db = FS.getFirestore(app);
+const f = add("go", "ডাটাবেস (Firestore) দেখা হচ্ছে…");
+let initDone = null;
+try {
+  const s = await FS.getDoc(FS.doc(db, "config", "init"));
+  initDone = s.exists();
+  set(f, "ok", "Firestore কাজ করছে", initDone ? "প্রথমবারের সেটআপ (অ্যাডমিন বানানো) আগেই হয়ে গেছে।" : "ডাটাবেস খালি। এখন সাইন-ইন পেজে “First-time setup” দিয়ে অ্যাডমিন বানান।");
+} catch (e) {
+  const c = e && e.code || "";
+  if (/permission/.test(c)) set(f, "no", "Rules ঠিক নেই", "firestore.rules ফাইলের লেখা Firebase > Firestore > Rules এ পেস্ট করে Publish করুন।");
+  else if (/not-found|failed-precondition|unavailable/.test(c) && /database|exist/i.test(e.message || "")) set(f, "no", "Firestore ডাটাবেস বানানো হয়নি", "Firebase > Firestore Database > Create database (asia-south1) করুন।");
+  else set(f, "no", "Firestore: " + c, e.message || "");
+}
+
+// 3. the rules must NOT be open
+const r = add("go", "রুলস নিরাপদ কিনা দেখা হচ্ছে…");
+try {
+  await FS.getDoc(FS.doc(db, "users", "check-only"));
+  set(r, "no", "রুলস খোলা আছে (বিপজ্জনক)", "যে কেউ আপনার ডাটা পড়তে পারবে। firestore.rules এর লেখা Publish করুন।");
+} catch (e) {
+  if (/permission/.test((e && e.code) || "")) set(r, "ok", "রুলস সুরক্ষিত", "লগইন ছাড়া কেউ ছাত্রদের তথ্য পড়তে পারে না।");
+  else set(r, "wa", "রুলস দেখা গেল না", (e && e.code) || "");
+}
+
+// 4. install / service worker
+add("serviceWorker" in navigator ? "ok" : "wa", "অ্যাপ ইনস্টল (PWA)", "serviceWorker" in navigator ? "এই ব্রাউজারে হোম স্ক্রিনে ইনস্টল করা যাবে।" : "এই ব্রাউজারে ইনস্টল সুবিধা নেই।");
+if (initDone === false) add("wa", "পরের ধাপ", "অ্যাপ খুলে সাইন-ইন পেজের নিচে “First-time setup (admin only)” চাপুন।");
+</script>
+</body>
+</html>
