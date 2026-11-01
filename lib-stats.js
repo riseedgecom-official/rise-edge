@@ -25,7 +25,7 @@ export function calcBatch({ students, att = [], exams = [], hw = [], from, to = 
     }
     for (const e of E) {
       for (const u of e.subs || []) {
-        if (u.st !== "H") continue;
+        if (!counted(u)) continue;
         const m = +((u.m || {})[s.id] || 0);
         tot += u.total; g += m;
         items.push({ ex: e.title, n: u.n, d: e.date, g: m, t: u.total });
@@ -48,16 +48,25 @@ export function calcBatch({ students, att = [], exams = [], hw = [], from, to = 
 // compact row stored in bstat/{batch} (what a student is allowed to see)
 export const statRow = (r) => ({ ex: r.ex, er: r.er, ov: r.ov, or: r.or, p: r.p, a: r.a, hw: r.hw });
 
-// Rank list for ONE exam (all held subjects added together)
+// A subject counts in ranks, reports and results only when it was held AND its marks are final.
+// ws: "d" draft | "s" submitted, waiting for approval | "a" approved (no ws = old data = final).
+export const counted = (u) => u.st === "H" && (!u.ws || u.ws === "a");
+
+// Rank list for ONE exam (all counted subjects added together)
 export function examRows(exam, students) {
-  const held = (exam.subs || []).filter((u) => u.st === "H");
+  const held = (exam.subs || []).filter(counted);
   if (!held.length) return [];
   const t = n2(held.reduce((a, u) => a + u.total, 0));
   const R = students.map((s) => ({ s, g: n2(held.reduce((a, u) => a + (+(u.m || {})[s.id] || 0), 0)) }));
   const vs = [...new Set(R.map((r) => r.g))].sort((a, b) => b - a);
   return R.map((r) => ({
     s: r.s, g: r.g, t, rk: vs.indexOf(r.g) + 1, n: R.length,
-    subs: held.map((u) => ({ n: u.n, t: u.total, m: +((u.m || {})[r.s.id] || 0), ab: (u.m || {})[r.s.id] == null })),
+    subs: held.map((u) => {
+      const x = { n: u.n, t: u.total, m: +((u.m || {})[r.s.id] || 0), ab: (u.m || {})[r.s.id] == null };
+      if (u.pm > 0) x.pm = u.pm;
+      if (Array.isArray(u.dv) && u.dv.length) { const d = (u.dm || {})[r.s.id] || {}; x.pt = u.dv.map((p) => ({ n: p.n, t: p.t, m: +d[p.n] || 0 })); }
+      return x;
+    }),
   })).sort((a, b) => a.rk - b.rk);
 }
 

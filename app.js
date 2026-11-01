@@ -25,6 +25,7 @@ const NAV = [
   { k: "routine", ic: "clock", l: "Routine", r: "acts", g: "Class" },
   { k: "homework", ic: "book", l: "Homework", r: "acts", g: "Class" },
   { k: "exams", ic: "clip", l: "Exams", r: "acts", tab: 1, g: "Class" },
+  { k: "marks", ic: "check", l: "Marks approval", r: "ac", g: "Class" },
   { k: "guardian", ic: "sms", l: "Guardian results", r: "act", g: "Class" },
   { k: "syllabus", ic: "list", l: "Syllabus", r: "acts", g: "Class" },
   { k: "month", ic: "calendar", l: "Month", r: "act", g: "Results" },
@@ -230,7 +231,7 @@ async function boot() {
   if (!configured) { window.__riseReady = true; return renderNotConfigured(); }
   // page modules: one broken file must not stop the others
   S.moduleErrors = [];
-  const mods = ["pages-home.js", "pages-people.js", "pages-account.js", "pages-attendance.js", "pages-exams.js", "pages-results.js", "pages-fees.js", "pages-content.js"];
+  const mods = ["pages-home.js", "pages-people.js", "pages-account.js", "pages-attendance.js", "pages-exams.js", "pages-results.js", "pages-fees.js", "pages-content.js", "pages-marks.js"];
   // one after the other, in a fixed order, so the texts of the modules are always added in the same order (the files are preloaded in index.html)
   for (const m of mods) await import("./" + m).catch((e) => { console.error(m, e); S.moduleErrors.push(m + ": " + (e && e.message)); });
   onAuth((u) => { start(u).catch((e) => { console.error(e); S.loginMsg = dbError(e); signOutNow().catch(() => {}); }); });

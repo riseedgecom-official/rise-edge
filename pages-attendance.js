@@ -5,6 +5,7 @@ import {
   smsHref, waHref, addBN, activeStudents, curBatch, f1, n2, batchOf,
 } from "./lib-core.js";
 import { icon, avatar, tag, empty, notice, card, row, btn, chips, input, select, textarea, batchPicker, ring, ask, form, toast, modal } from "./lib-ui.js";
+import { counted } from "./lib-stats.js";
 import { batchData, dropBatchCache, recalcBatch, getStats, notify, logAct, sendMail, downloadFile, delFile } from "./lib-svc.js";
 
 const noBatch = () => empty(S.me && S.me.role === "student" ? t("You are not in a batch yet.") : t("Add a batch first."), "layers");
@@ -198,7 +199,7 @@ export async function todayClasses() {
 
 // ---------- guardian results ----------
 function gRows(e) {
-  const held = (e.subs || []).filter((u) => u.st === "H");
+  const held = (e.subs || []).filter(counted);
   const R = activeStudents().map((s) => {
     let g = 0, tt = 0;
     const pt = held.map((u) => { const m = +((u.m || {})[s.id] || 0); g += m; tt += u.total; return u.n + " " + m + "/" + u.total; });

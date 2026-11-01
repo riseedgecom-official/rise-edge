@@ -53,7 +53,7 @@ const noticeCard = async () => {
 // ---------- admin / co-admin ----------
 async function staffHome() {
   const d = T(), m = d.slice(0, 7), A = S.U.filter(active), fees = canFees();
-  const [docs, P, BF, fp, rq, abs, ranks, pr] = await Promise.all([
+  const [docs, P, BF, fp, rq, abs, ranks, pr, mk] = await Promise.all([
     Promise.all(S.B.map((b) => db.get("att/" + b.id + "_" + d).catch(() => null))),
     fees ? db.list("pay", ["m", "==", m]).catch(() => []) : [],
     fees ? db.list("bf", ["m", "==", m]).catch(() => []) : [],
@@ -62,6 +62,7 @@ async function staffHome() {
     lazy("pages-attendance.js", "absentToday"),
     lazy("pages-exams.js", "ranksBox"),
     fees ? lazy("pages-fees.js", "payRequestsCard") : "",
+    lazy("pages-marks.js", "pendingMarks"),
   ]);
   let pres = 0, ab = 0;
   docs.forEach((x, i) => {
@@ -83,6 +84,7 @@ async function staffHome() {
     stat({ ic: "cap", label: t("Teachers"), value: teachers, color: "#0a9aa8", ...nav("teachers") }),
   ])}</div>
   ${S.PEND.length || fp.length ? `<div class="mt">${notice(`${S.PEND.length ? `${esc(t("Registrations waiting for approval"))}: <b>${S.PEND.length}</b>. ` : ""}${fp.length ? `${esc(t("Password help requests"))}: <b>${fp.length}</b>. ` : ""}${btn(t("Open"), "nav", { arg: "approvals", sm: true })}`, "warn", "user")}</div>` : ""}
+  ${mk ? `<div class="mt">${notice(`${esc(t("Marks waiting for approval"))}: <b>${mk}</b>. ${btn(t("Open"), "nav", { arg: "marks", sm: true })}`, "info")}</div>` : ""}
   ${pr ? `<div class="mt">${pr}</div>` : ""}${abs ? `<div class="mt">${abs}</div>` : ""}${ranks ? `<div class="mt">${ranks}</div>` : ""}`;
 }
 
@@ -100,7 +102,8 @@ async function teacherHome() {
   const rowOf = (b, i) => {
     const L = A.filter((s) => s.bid === b.id), x = docs[i];
     const pc = x && L.length ? Math.round(((L.length - L.filter((s) => (x.A || []).includes(s.id) || (x.E || []).includes(s.id)).length) / L.length) * 100) + "%" : t("Not taken");
-    return row({ title: b.name, sub: esc(t("{n} students", { n: L.length })), right: `<b class="${x ? "ok" : "warn"}">${esc(pc)}</b>${btn(t("Attendance"), "hm-att", { arg: b.id, sm: true, ic: "calcheck" })}` });
+    const sj = (S.me.sj || {})[b.id];
+    return row({ title: b.name, sub: esc(t("{n} students", { n: L.length }) + (sj && sj.length ? " · " + sj.join(", ") : "")), right: `<b class="${x ? "ok" : "warn"}">${esc(pc)}</b>${btn(t("Attendance"), "hm-att", { arg: b.id, sm: true, ic: "calcheck" })}` });
   };
   return `${welcome(t("Here is an overview of your classes today."))}${pwNote()}${installCard()}
   <div class="mt">${tiles([
@@ -146,5 +149,5 @@ addBN({
   "Registrations waiting for approval": "অনুমোদনের অপেক্ষায় রেজিস্ট্রেশন", "Password help requests": "পাসওয়ার্ড সাহায্যের অনুরোধ", "Open": "খুলুন", "{n} students": "{n} জন ছাত্র", "Attendance": "উপস্থিতি", "Not taken": "নেওয়া হয়নি", "Here is an overview of your classes today.": "আজকের ক্লাসের সারসংক্ষেপ।",
   "Your classes": "আপনার ক্লাস", "My batches": "আমার ব্যাচ", "Attendance taken": "উপস্থিতি নেওয়া হয়েছে", "Today": "আজ", "My classes": "আমার ক্লাস", "No batch assigned yet.": "এখনো কোনো ব্যাচ দেওয়া হয়নি।", "Exams": "পরীক্ষা", "Homework": "হোমওয়ার্ক", "Syllabus": "সিলেবাস",
   "You are not in a batch yet. The admin will add you to one.": "আপনি এখনো কোনো ব্যাচে নেই। অ্যাডমিন আপনাকে একটি ব্যাচে যোগ করবেন।", "This month": "এই মাস", "Counted from {d}.": "{d} থেকে গণনা।", "Exam average": "পরীক্ষার গড়", "Exam rank": "পরীক্ষার র‍্যাঙ্ক", "of {n} students": "{n} জনের মধ্যে",
-  "Overall": "সার্বিক", "Rank #{r} of {n}": "র‍্যাঙ্ক #{r} / {n}", "Results": "ফলাফল", "Report": "রিপোর্ট", "Requests": "অনুরোধ", "ID card": "আইডি কার্ড",
+  "Marks waiting for approval": "অনুমোদনের অপেক্ষায় নম্বর", "Overall": "সার্বিক", "Rank #{r} of {n}": "র‍্যাঙ্ক #{r} / {n}", "Results": "ফলাফল", "Report": "রিপোর্ট", "Requests": "অনুরোধ", "ID card": "আইডি কার্ড",
 });
