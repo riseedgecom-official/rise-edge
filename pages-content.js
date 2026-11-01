@@ -118,7 +118,7 @@ act("sh-send", async () => {
 
 // ================= alerts =================
 page("alerts", async () => {
-  const L = await getNotices();
+  const L = await getNotices(true);
   let seen = 0;
   try { seen = +localStorage.getItem(seenKey()) || 0; } catch (e) { /* ignore */ }
   const staff = isStaff() || isTeacher();
@@ -169,7 +169,7 @@ async function studentRequests() {
   else if (st.k === "subject") fields = `<p class="mut">${esc(t("Current group"))}: ${esc(grp ? t(grp) : "–")}</p>${select("nv", ["Science", "Commerce", "Arts"].map((g) => [g, t(g)]))}${input("d", { placeholder: t("Reason (optional)") })}`;
   else fields = `<p class="mut">${esc(t("Current"))}: ${esc(S.me.school || "–")}</p>${input("nv", { placeholder: t("New school / college name") })}${input("d", { placeholder: t("Note (optional)") })}`;
   return `${chips(Object.keys(RT).map((k) => ({ k, label: t(RT[k]) })), st.k, "rq-kind")}
-    <form class="card stack-s" data-submit="rq-send"><h3>${esc(t(RT[st.k]))}</h3>${fields}<button class="btn btn--pri" type="submit">${icon("send")}${esc(t("Send request"))}</button></form>
+    <form class="card stack-s" data-submit="rq-send"><h3>${esc(t(RT[st.k]))}</h3>${fields}<button class="btn btn--pri" type="submit">${icon("check")}${esc(t("Send request"))}</button></form>
     <div class="mt">${card(t("My requests"), L.length ? `<div class="list">${L.map((q) => `<div class="item"><div class="item-b"><b class="item-t">${esc(t(RT[q.type] || q.type))} ${stBox(q)}</b><span class="mut">${esc(rqTxt(q))} · ${esc(ago(q.t))}</span>${q.rp ? `<span><b>${esc(t("Reply"))}:</b> ${esc(q.rp)}</span>` : ""}</div></div>`).join("")}</div>` : empty(t("No requests yet."), "inbox"))}</div>`;
 }
 act("rq-kind", (el) => { const st = RQ(); st.k = el.dataset.arg; st.subj = ""; refresh(); });
@@ -255,8 +255,8 @@ addBN({
   "1. What is it?": "১. এটি কী?", "Homework": "হোমওয়ার্ক", "Suggestion": "সাজেশন", "Exam solution": "পরীক্ষার সমাধান", "2. Choose batch (one or more)": "২. ব্যাচ বেছে নিন (এক বা একাধিক)", "All batches": "সব ব্যাচ", "No batch.": "কোনো ব্যাচ নেই।",
   "Send": "পাঠান", "Cancel": "বাতিল", "Sending {k}/{m} (part {i}/{n})… keep the app open": "পাঠানো হচ্ছে {k}/{m} (অংশ {i}/{n})… অ্যাপ খোলা রাখুন", "Sent": "পাঠানো হয়েছে",
   "Send notice to a batch": "ব্যাচে নোটিশ পাঠান", "Write the notice": "নোটিশ লিখুন", "Notifications": "নোটিফিকেশন", "No notifications.": "কোনো নোটিফিকেশন নেই।", "Sent to this batch": "এই ব্যাচে পাঠানো", "NEW": "নতুন",
-  "Topic review": "টপিক রিভিউ", "Recheck": "পুনর্মূল্যায়ন", "Leave application": "ছুটির আবেদন", "Change group": "গ্রুপ বদল", "Change school / college": "স্কুল / কলেজ বদল",
-  "Not seen yet": "এখনো দেখা হয়নি", "Seen - awaiting decision": "দেখা হয়েছে - সিদ্ধান্তের অপেক্ষায়", "Approved": "অনুমোদিত", "Rejected": "বাতিল",
+  "Topic review": "টপিক রিভিউ", "Recheck": "রিচেক", "Leave application": "ছুটির আবেদন", "Change group": "গ্রুপ পরিবর্তন", "Change school / college": "স্কুল / কলেজ বদল",
+  "Not seen yet": "এখনো দেখা হয়নি", "Seen - awaiting decision": "দেখা হয়েছে - সিদ্ধান্তের অপেক্ষায়", "Approved": "অনুমোদিত", "Rejected": "বাতিল হয়েছে",
   "Choose the subject and the topic you want reviewed.": "যে বিষয় ও টপিক রিভিউ চান তা বেছে নিন।", "Note (optional)": "নোট (ঐচ্ছিক)", "No syllabus for this batch yet.": "এই ব্যাচের সিলেবাস এখনো নেই।", "Subject and topic": "বিষয় ও টপিক",
   "Exam name, subject and reason": "পরীক্ষার নাম, বিষয় ও কারণ", "From": "থেকে", "To": "পর্যন্ত", "Reason": "কারণ", "Current group": "বর্তমান গ্রুপ", "Reason (optional)": "কারণ (ঐচ্ছিক)", "Current": "বর্তমান", "New school / college name": "নতুন স্কুল / কলেজের নাম",
   "Send request": "অনুরোধ পাঠান", "My requests": "আমার অনুরোধ", "Reply": "উত্তর", "No requests yet.": "এখনো কোনো অনুরোধ নেই।", "Write the details": "বিস্তারিত লিখুন", "Choose the leave date": "ছুটির তারিখ বেছে নিন", "The end date is before the start date": "শেষের তারিখ শুরুর আগে",

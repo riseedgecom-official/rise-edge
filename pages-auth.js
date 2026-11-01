@@ -1,8 +1,8 @@
 // Signed-out screens: sign in, register, forgot password, first-time setup. Also the forced
 // "choose a new password" box and the "config.js is not filled" screen.
 import { db, signIn, sendReset, changePassword, withNewAccount, isEmailInUse, authEmail, dbError } from "./lib-db.js";
-import { S, $, esc, t, act, onSubmit, formData, lk, isEmail, addBN, instName, go } from "./lib-core.js";
-import { icon, input, select, field, notice, toast, form, info, chips, clsOptions, grpOptions, closeModals } from "./lib-ui.js";
+import { S, $, esc, t, act, onSubmit, onChange, formData, lk, isEmail, addBN, instName } from "./lib-core.js";
+import { icon, input, select, notice, toast, form, chips, clsOptions, grpOptions } from "./lib-ui.js";
 import { loadInst, selfRegister, sendMail } from "./lib-svc.js";
 
 const $app = () => document.getElementById("app");
@@ -166,7 +166,6 @@ async function renderRegister(review = false) {
 }
 const keep = () => { const f = $("form[data-submit]"); if (f) REG = { ...REG, ...formData(f) }; };
 act("reg-role", (el) => { keep(); REG.role = el.dataset.arg; renderRegister(); });
-import { onChange } from "./lib-core.js";
 onChange("reg-cls", (el) => { const b = $("#grp-box"); if (b) b.hidden = !(+el.value >= 9); });
 const phoneOk = (p) => /^(\+?88)?01\d{9}$/.test(String(p || "").replace(/[\s-]/g, ""));
 onSubmit("reg-review", (el) => {
@@ -245,10 +244,10 @@ addBN({
   "Admin name": "অ্যাডমিনের নাম", "Email": "ইমেইল", "Password (min 6 characters)": "পাসওয়ার্ড (কমপক্ষে ৬ অক্ষর)", "Repeat password": "পাসওয়ার্ড আবার দিন", "Create admin": "অ্যাডমিন তৈরি করুন", "Back to sign in": "সাইন ইনে ফিরুন",
   "Enter the admin name.": "অ্যাডমিনের নাম দিন।", "Enter a valid email.": "সঠিক ইমেইল দিন।", "The password needs at least 6 characters.": "পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।", "The two passwords are different.": "দুইটি পাসওয়ার্ড মেলেনি।",
   "Setup is already done. Please sign in.": "সেটআপ আগেই হয়ে গেছে। সাইন ইন করুন।", "This email already has an account. Try signing in.": "এই ইমেইলে আগেই অ্যাকাউন্ট আছে। সাইন ইন করুন।",
-  "Registration is closed right now. Please contact the academy.": "এখন রেজিস্ট্রেশন বন্ধ আছে। একাডেমির সাথে যোগাযোগ করুন।", "Student": "ছাত্র", "Teacher": "শিক্ষক", "Admin": "অ্যাডমিন", "Co-admin": "কো-অ্যাডমিন",
-  "Full name": "পুরো নাম", "Nickname (optional)": "ডাকনাম (ঐচ্ছিক)", "Group (Class 9-12)": "বিভাগ (ক্লাস ৯-১২)", "School / college": "স্কুল / কলেজ", "Subject you teach": "যে বিষয় পড়ান", "Class you teach (optional)": "যে ক্লাসে পড়ান (ঐচ্ছিক)",
+  "Registration is closed right now. Please contact the academy.": "এখন রেজিস্ট্রেশন বন্ধ আছে। অনুগ্রহ করে একাডেমির সাথে যোগাযোগ করুন।", "Student": "ছাত্র", "Teacher": "শিক্ষক", "Admin": "অ্যাডমিন", "Co-admin": "কো-অ্যাডমিন",
+  "Full name": "পূর্ণ নাম", "Nickname (optional)": "ডাকনাম (ঐচ্ছিক)", "Group (Class 9-12)": "বিভাগ (ক্লাস ৯-১২)", "School / college": "স্কুল / কলেজ", "Subject you teach": "যে বিষয় পড়ান", "Class you teach (optional)": "যে ক্লাসে পড়ান (ঐচ্ছিক)",
   "Your phone number": "আপনার ফোন নম্বর", "Guardian's phone number": "অভিভাবকের ফোন নম্বর", "Guardian's email (optional)": "অভিভাবকের ইমেইল (ঐচ্ছিক)", "Address (optional)": "ঠিকানা (ঐচ্ছিক)", "Email (optional)": "ইমেইল (ঐচ্ছিক)",
-  "We send your login ID here.": "আপনার লগইন আইডি এখানে পাঠানো হবে।", "Choose a password (min 6 characters)": "পাসওয়ার্ড বেছে নিন (কমপক্ষে ৬ অক্ষর)", "Review": "যাচাই করুন",
+  "We send your login ID here.": "আপনার লগইন আইডি এখানে পাঠানো হবে।", "Choose a password (min 6 characters)": "পাসওয়ার্ড বেছে নিন (কমপক্ষে ৬ অক্ষর)", "Review": "পর্যালোচনা",
   "Enter your full name.": "পুরো নাম দিন।", "Choose your class.": "ক্লাস বেছে নিন।", "Choose your group (Science / Commerce / Arts).": "বিভাগ বেছে নিন (বিজ্ঞান / ব্যবসায় শিক্ষা / মানবিক)।",
   "Enter a valid phone number (01XXXXXXXXX).": "সঠিক ফোন নম্বর দিন (01XXXXXXXXX)।", "Enter a valid guardian phone number (01XXXXXXXXX).": "অভিভাবকের সঠিক ফোন নম্বর দিন (01XXXXXXXXX)।",
   "The email looks wrong.": "ইমেইলটি ঠিক মনে হচ্ছে না।", "The guardian email looks wrong.": "অভিভাবকের ইমেইলটি ঠিক মনে হচ্ছে না।", "Check your details": "তথ্য যাচাই করুন",
@@ -262,5 +261,5 @@ addBN({
   "The new password must be different.": "নতুন পাসওয়ার্ড আলাদা হতে হবে।", "The current password is wrong.": "বর্তমান পাসওয়ার্ড ভুল।", "Password changed.": "পাসওয়ার্ড বদলানো হয়েছে।",
   "Menu": "মেনু", "Logout": "লগআউট", "Search student / teacher": "ছাত্র / শিক্ষক খুঁজুন", "Search": "খুঁজুন", "Nothing found": "কিছু পাওয়া যায়নি", "Alerts": "বার্তা", "Something went wrong": "কিছু একটা ভুল হয়েছে", "Try again": "আবার চেষ্টা করুন",
   "Opening your page…": "আপনার পাতা খুলছে…", "This account is switched off. Please ask the admin.": "এই অ্যাকাউন্ট বন্ধ আছে। অ্যাডমিনকে জানান।", "No account found for this login. Ask the admin, or register.": "এই লগইনের কোনো অ্যাকাউন্ট নেই। অ্যাডমিনকে জানান অথবা রেজিস্ট্রেশন করুন।",
-  "Show": "দেখাও", "Hide": "লুকাও", "Co-admin panel": "কো-অ্যাডমিন প্যানেল", "Settings": "সেটিংস", "Month": "মাস", "Class": "শ্রেণি",
+  "Show": "দেখাও", "Hide": "লুকাও", "Co-admin panel": "কো-অ্যাডমিন প্যানেল", "Settings": "সেটিংস", "Month": "মাস", "Class": "ক্লাস",
 });

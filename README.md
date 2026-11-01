@@ -87,8 +87,8 @@ Firebase → **Authentication → Settings → Authorized domains → Add domain
 | ID card | ছাত্র/শিক্ষকের কার্ড, পুরো ব্যাচের কার্ড একসাথে প্রিন্ট |
 | Settings *(অ্যাডমিন)* | প্রতিষ্ঠানের নাম, ফোন, ঠিকানা; ইমেইল সেটআপ |
 
-**শিক্ষক:** Dashboard, Attendance, Routine, Homework, Exams, Guardian results, Syllabus, Month, Report, Result sheet, Records, Suggestions, Exam solutions, Alerts, Requests (শুধু টপিক রিভিউ ও রিচেক), ID card, Profile — শুধু নিজের ব্যাচের জন্য।
-**ছাত্র:** নিজের Dashboard, Attendance, Routine, Homework, Exams (ফল), Syllabus (নিজের “আমি পারি” টিক), Report, Fees (নিজের ফি, পেমেন্ট অনুরোধ, রসিদ), Suggestions, Exam solutions, Alerts, Requests, ID card, Profile।
+**শিক্ষক:** Dashboard (নিজের বেতনের তথ্য সহ), Attendance, Routine, Homework, Exams, Guardian results, Syllabus, Month, Report, Result sheet, Records, Suggestions, Exam solutions, Alerts, Requests (শুধু টপিক রিভিউ ও রিচেক), ID card, Profile — শুধু নিজের ব্যাচের জন্য।
+**ছাত্র:** নিজের Dashboard, Attendance, Routine, Homework, Exams (ফল), Syllabus (নিজের “আমি পারি” টিক), Report, Result sheet, Fees (নিজের ফি, পেমেন্ট অনুরোধ, রসিদ), Suggestions, Exam solutions, Alerts, Requests, ID card, Profile।
 
 ### ডিজিটাল আইডি কার্ড
 সাদা কার্ড, ওপরে গোল লোগো, নীল ফ্রেম ও সোনালি কোণ, বাঁ দিকে ছবি ও QR, ডান দিকে নাম / রোল / ক্লাস / ব্যাচ / অভিভাবকের নাম / অভিভাবকের ফোন। ছবি দেয় ছাত্র নিজে (Profile → Change photo)। প্রিন্ট বা PDF: কার্ড খুলে **Print / Save PDF**।

@@ -16,7 +16,7 @@ function guardianBtns(s, text, mailAct, mailSubject) {
   const p = s.gphone;
   return `${p ? `<a class="btn btn--sm" href="${esc(smsHref(p, text))}">${icon("sms")}SMS</a><a class="btn btn--sm" target="_blank" rel="noopener" href="${esc(waHref(p, text))}">${icon("phone")}WhatsApp</a>` : `<span class="mut sm">${esc(t("No guardian phone."))}</span>`}${s.gem ? btn(t("Email"), mailAct, { arg: s.id, sm: true, ic: "mail" }) : ""}`;
 }
-const absRows = (list, d) => list.map((s) => row({ av: avatar(s, 36), title: s.name, sub: esc(t("Roll {r}", { r: s.roll })), right: guardianBtns(s, absMsg(s, d), "att-mail") })).join("");
+const absRows = (list, d) => list.map((s) => `<div class="item" style="flex-wrap:wrap">${avatar(s, 36)}<div class="item-b"><b class="item-t">${esc(s.name)}</b><span class="mut">${esc(t("Roll {r}", { r: s.roll }))}</span></div><div class="item-a" style="flex-basis:100%;justify-content:flex-start">${guardianBtns(s, absMsg(s, d), "att-mail")}</div></div>`).join("");
 
 // ---------- attendance ----------
 const A = () => pageState("att");
@@ -242,9 +242,9 @@ act("gr-all", async () => {
 
 addBN({
   "You are not in a batch yet.": "আপনি এখনো কোনো ব্যাচে নেই।", "{inst}: Dear Guardian, {name} (Roll {roll}) was absent from {batch} on {d}.": "{inst}: প্রিয় অভিভাবক, {name} (রোল {roll}) {d} তারিখে {batch} এ অনুপস্থিত ছিল।",
-  "class": "ক্লাস", "Guardian of {n}": "{n} এর অভিভাবক", "No guardian phone.": "অভিভাবকের ফোন নেই।", "Roll {r}": "রোল {r}", "on leave": "ছুটিতে", "All present": "সবাই উপস্থিত", "Class day saved": "ক্লাস দিন সংরক্ষিত",
-  "Not saved: not counted as a class day": "সংরক্ষিত নয়: ক্লাস দিন হিসেবে গণ্য হবে না", "Present": "উপস্থিত", "Absent": "অনুপস্থিত", "Excused": "ছুটি", "No students in this batch.": "এই ব্যাচে কোনো ছাত্র নেই।", "Save class day": "ক্লাস দিন সংরক্ষণ",
-  "P = Present, A = Absent, E = Excused (leave).": "P = উপস্থিত, A = অনুপস্থিত, E = ছুটি।", "Absent alert to guardians": "অভিভাবকদের অনুপস্থিতির বার্তা", "Delete this class day": "এই ক্লাস দিন মুছুন", "Saved": "সংরক্ষিত",
+  "class": "ক্লাস", "Guardian of {n}": "{n} এর অভিভাবক", "No guardian phone.": "অভিভাবকের ফোন নেই।", "Roll {r}": "রোল {r}", "on leave": "ছুটিতে", "All present": "সবাই উপস্থিত", "Class day saved": "ক্লাসের দিন সংরক্ষিত হয়েছে",
+  "Not saved: not counted as a class day": "সংরক্ষিত নয়: ক্লাস দিন হিসেবে গণ্য হবে না", "Present": "উপস্থিত", "Absent": "অনুপস্থিত", "Excused": "ছুটি", "No students in this batch.": "এই ব্যাচে কোনো ছাত্র নেই।", "Save class day": "ক্লাসের দিন সংরক্ষণ করুন",
+  "P = Present, A = Absent, E = Excused (leave).": "P = উপস্থিত, A = অনুপস্থিত, E = ছুটি।", "Absent alert to guardians": "অভিভাবককে অনুপস্থিতির বার্তা", "Delete this class day": "এই ক্লাস দিন মুছুন", "Saved": "সংরক্ষিত",
   "Delete the saved attendance of {d}?": "{d} এর সংরক্ষিত উপস্থিতি মুছবেন?", "Absent: {n}": "অনুপস্থিত: {n}", "Email sent": "ইমেইল পাঠানো হয়েছে", "My attendance": "আমার উপস্থিতি", "Attendance": "উপস্থিতি",
   "No class day has been recorded this month yet.": "এই মাসে এখনো কোনো ক্লাস দিন রেকর্ড হয়নি।", "Class days": "ক্লাস দিন", "Counted from {d}.": "{d} থেকে গণনা।", "Absent today": "আজ অনুপস্থিত",
   "No homework yet.": "এখনো কোনো হোমওয়ার্ক নেই।", "Done": "সম্পন্ন", "Not done": "সম্পন্ন নয়", "File": "ফাইল", "New homework": "নতুন হোমওয়ার্ক", "Homework": "হোমওয়ার্ক", "Date": "তারিখ", "Add homework": "হোমওয়ার্ক যোগ করুন",

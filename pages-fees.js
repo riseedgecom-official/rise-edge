@@ -39,10 +39,10 @@ async function studentsTab() {
   ${S.bid ? `<form class="card stack-s mt" data-submit="fe-pay"><h3>${esc(t("Student payment"))}</h3>${select("sid", L.map((s) => [s.id, s.name]), "", { label: t("Student") })}
     <div class="grid g2">${input("amt", { type: "number", step: "any", min: "1", label: t("Amount (৳)"), inputmode: "decimal" })}${select("method", [["Cash", t("Cash")], ["bKash", "bKash"], ["Nagad", "Nagad"], ["Rocket", "Rocket"], ["Bank", t("Bank")], ["Other", t("Other")]], "Cash", { label: t("Method") })}</div>
     ${input("tx", { label: t("Transaction ID (optional)") })}<button class="btn btn--pri" type="submit">${icon("check")}${esc(t("Add payment"))}</button></form>
-  <div class="card mt"><div class="card-h"><h3>${esc(monthLabel(st.m))}</h3></div>${L.map((s) => {
+  <div class="card mt"><div class="card-h"><h3>${esc(monthLabel(st.m))}</h3></div><div class="list">${L.map((s) => {
     const fee = feeFor(s, curBatch(), st.m, ctx(BFADM)), pd = paidIn(P, s.id, st.m), x = fee ? stateOf(fee, pd, false) : ["", t("No fee")];
     return row({ av: avatar(s, 36), title: s.name, sub: `${money(pd)} / ${money(fee)}`, right: `${pd > 0 ? btn(t("Receipt"), "fe-rcpt", { arg: s.id, sm: true, ic: "doc" }) : ""}<b class="${x[0]}">${esc(x[1])}</b>` });
-  }).join("") || empty(t("No students."), "users")}</div>` : ""}`;
+  }).join("") || empty(t("No students."), "users")}</div></div>` : ""}`;
 }
 onChange("fe-month", (el) => { if (el.value) { F().m = el.value; refresh(); } });
 onSubmit("fe-pay", async (el) => {
@@ -176,12 +176,12 @@ async function studentFees() {
 const payPanel = (x) => {
   const st = F(), k = st.k || "";
   if (!k) return `<div class="card mt" data-stop><b>${esc(t("How did you pay?"))}</b><div class="row mt">${btn(t("Cash"), "fe-k", { arg: "cash", sm: true })}${btn(t("Online"), "fe-k", { arg: "online", sm: true })}</div></div>`;
-  if (k === "cash") return `<div class="card mt"><b>${esc(t("Cash"))} · ${money(x.due)}</b><p class="mut sm">${esc(t("The admin will check and approve it."))}</p><div class="row">${btn(t("Send for approval"), "fe-send", { kind: "pri", sm: true })}${btn(t("Back"), "fe-k", { arg: "", sm: true })}</div></div>`;
-  return `<div class="card mt"><b>${esc(t("Online"))} · ${money(x.due)}</b>${input("ptx", { placeholder: t("Transaction ID (optional)"), value: st.tx || "", "data-input": "fe-tx" })}
+  if (k === "cash") return `<div class="card mt" data-stop><b>${esc(t("Cash"))} · ${money(x.due)}</b><p class="mut sm">${esc(t("The admin will check and approve it."))}</p><div class="row">${btn(t("Send for approval"), "fe-send", { kind: "pri", sm: true })}${btn(t("Back"), "fe-k", { arg: "", sm: true })}</div></div>`;
+  return `<div class="card mt" data-stop><b>${esc(t("Online"))} · ${money(x.due)}</b>${input("ptx", { placeholder: t("Transaction ID (optional)"), value: st.tx || "", "data-input": "fe-tx" })}
     <label class="fld mt"><span>${esc(t("Payment screenshot"))}</span><input type="file" accept="image/*" data-change="fe-img"></label>${st.img ? `<img src="${esc(st.img)}" alt="" style="max-height:160px;border-radius:8px;margin-bottom:8px">` : ""}
     <div class="row">${btn(t("Send for approval"), "fe-send", { kind: "pri", sm: true })}${btn(t("Back"), "fe-k", { arg: "", sm: true })}</div></div>`;
 };
-act("fe-sel", (el, e) => { if (e.target.closest(".card")) return; const st = F(); st.m = st.m === el.dataset.arg ? "" : el.dataset.arg; st.k = ""; st.img = ""; st.tx = ""; refresh(); });
+act("fe-sel", (el, e) => { if (e.target.closest("[data-stop]")) return; const st = F(); st.m = st.m === el.dataset.arg ? "" : el.dataset.arg; st.k = ""; st.img = ""; st.tx = ""; refresh(); });
 act("fe-k", (el, e) => { e.stopPropagation(); F().k = el.dataset.arg; refresh(); });
 onInput("fe-tx", (el) => { F().tx = el.value; });
 onChange("fe-img", async (el) => { if (el.files[0]) { F().img = await shrinkImage(el.files[0]); refresh(); } });
@@ -203,7 +203,7 @@ export async function feeSummaryCard() {
   try {
     await loadMine();
     const L = months(), due = n2(L.filter((x) => !x.ok).reduce((a, x) => a + x.due, 0));
-    return `<button class="card card--click tl" data-act="nav" data-arg="fees" style="text-align:left;width:100%;font:inherit;color:inherit"><div class="card-h"><h3>${esc(t("Fees"))}</h3><b class="${due ? "bad" : "ok"}">${due ? t("Due") + " " + money(due) : t("All paid")}</b></div>
+    return `<button class="card card--click" data-act="nav" data-arg="fees" style="text-align:left;width:100%;font:inherit;color:inherit"><div class="card-h"><h3>${esc(t("Fees"))}</h3><b class="${due ? "bad" : "ok"}">${due ? t("Due") + " " + money(due) : t("All paid")}</b></div>
       ${L.slice(0, 3).map((x) => { const s = stateOf(x.fee, x.paid, x.pend); return `<div class="row" style="justify-content:space-between;padding:3px 0"><span>${esc(monthLabel(x.m))}</span><b class="${s[0]}">${esc(s[1])}</b></div>`; }).join("")}</button>`;
   } catch (e) { return ""; }
 }
@@ -230,11 +230,11 @@ addBN({
   "Amount (৳)": "পরিমাণ (৳)", "Method": "মাধ্যম", "Bank": "ব্যাংক", "Other": "অন্যান্য", "Transaction ID (optional)": "ট্রানজেকশন আইডি (ঐচ্ছিক)", "Add payment": "পেমেন্ট যোগ করুন", "Receipt": "রসিদ", "No fee": "ফি নেই", "No students.": "কোনো ছাত্র নেই।",
   "Enter the amount": "পরিমাণ দিন", "This Transaction ID is already used": "এই ট্রানজেকশন আইডি আগেই ব্যবহার হয়েছে", "Payment received: ৳{a} ({m})": "পেমেন্ট গৃহীত: ৳{a} ({m})", "Saved": "সংরক্ষিত", "Screenshot not found": "স্ক্রিনশট পাওয়া যায়নি",
   "Already handled": "আগেই সম্পন্ন হয়েছে", "Payment approved: ৳{a} ({m})": "পেমেন্ট অনুমোদিত: ৳{a} ({m})", "Reason (optional)": "কারণ (ঐচ্ছিক)", "Payment not approved: {m}": "পেমেন্ট অনুমোদিত হয়নি: {m}", "No payment found for this month": "এই মাসে কোনো পেমেন্ট পাওয়া যায়নি",
-  "FEE RECEIPT": "ফি রসিদ", "Receipt no": "রসিদ নং", "Date": "তারিখ", "Roll": "রোল", "Batch": "ব্যাচ", "Amount": "পরিমাণ", "Monthly fee": "মাসিক ফি", "Total paid": "মোট পরিশোধ", "PARTLY PAID": "আংশিক পরিশোধ", "PAID": "পরিশোধিত", "Authorized signature": "অনুমোদিত স্বাক্ষর",
+  "FEE RECEIPT": "ফি রসিদ", "Receipt no": "রসিদ নং", "Date": "তারিখ", "Roll": "রোল", "Batch": "ব্যাচ", "Amount": "টাকার পরিমাণ", "Monthly fee": "মাসিক ফি", "Total paid": "মোট পরিশোধ", "PARTLY PAID": "আংশিক পরিশোধ", "PAID": "পরিশোধিত", "Authorized signature": "অনুমোদিত স্বাক্ষর",
   "Fee settings": "ফি সেটিংস", "Default monthly fee (all students)": "সাধারণ মাসিক ফি (সব ছাত্র)", "Save": "সংরক্ষণ", "Order used: personal fee, then the published fee of that month, then the batch fee, then the default fee.": "প্রযোজ্য ক্রম: ব্যক্তিগত ফি, তারপর ওই মাসের প্রকাশিত ফি, তারপর ব্যাচ ফি, তারপর সাধারণ ফি।",
   "Tap a batch, then choose the month and the amount. Publishing shows the fee on the dashboard of every student in that batch.": "একটি ব্যাচ চাপুন, মাস ও পরিমাণ বেছে নিন। প্রকাশ করলে ওই ব্যাচের সব ছাত্রের ড্যাশবোর্ডে ফি দেখা যাবে।",
-  "Batch fee {a}": "ব্যাচ ফি {a}", "Publish": "প্রকাশ", "Set as batch fee": "ব্যাচ ফি হিসেবে সেট", "Remove": "সরান", "Choose the month": "মাস বেছে নিন", "Fee published: {m} ৳{a}": "ফি প্রকাশিত: {m} ৳{a}", "Published": "প্রকাশিত", "Remove this fee? The default fee will apply again.": "এই ফি সরাবেন? সাধারণ ফি আবার প্রযোজ্য হবে।",
-  "Teacher": "শিক্ষক", "Payment done": "পেমেন্ট সম্পন্ন", "Teacher payment status": "শিক্ষকদের পেমেন্টের অবস্থা", "Not paid": "পরিশোধিত নয়", "Delete": "মুছুন", "No teacher yet.": "এখনো কোনো শিক্ষক নেই।", "Payment received: ৳{a} for {m}": "পেমেন্ট গৃহীত: ৳{a}, {m} এর জন্য", "Delete this payment?": "এই পেমেন্ট মুছবেন?",
-  "You are not in a batch yet.": "আপনি এখনো কোনো ব্যাচে নেই।", "My fees": "আমার ফি", "Total due": "মোট বাকি", "Rejected": "বাতিল হয়েছে", "How did you pay?": "কীভাবে পরিশোধ করেছেন?", "The admin will check and approve it.": "অ্যাডমিন যাচাই করে অনুমোদন দেবেন।", "Send for approval": "অনুমোদনের জন্য পাঠান", "Back": "পেছনে",
+  "Batch fee {a}": "ব্যাচ ফি {a}", "Publish": "প্রকাশ করুন", "Set as batch fee": "ব্যাচ ফি হিসেবে সেট", "Remove": "সরান", "Choose the month": "মাস বেছে নিন", "Fee published: {m} ৳{a}": "ফি প্রকাশিত: {m} ৳{a}", "Published": "প্রকাশিত", "Remove this fee? The default fee will apply again.": "এই ফি সরাবেন? সাধারণ ফি আবার প্রযোজ্য হবে।",
+  "Teacher": "শিক্ষক", "Payment done": "পেমেন্ট সম্পন্ন", "Teacher payment status": "শিক্ষকদের পেমেন্টের অবস্থা", "Not paid": "পরিশোধ হয়নি", "Delete": "মুছুন", "No teacher yet.": "এখনো কোনো শিক্ষক নেই।", "Payment received: ৳{a} for {m}": "পেমেন্ট গৃহীত: ৳{a}, {m} এর জন্য", "Delete this payment?": "এই পেমেন্ট মুছবেন?",
+  "You are not in a batch yet.": "আপনি এখনো কোনো ব্যাচে নেই।", "My fees": "আমার ফি", "Total due": "মোট বাকি", "Rejected": "বাতিল হয়েছে", "How did you pay?": "কীভাবে পরিশোধ করেছেন?", "The admin will check and approve it.": "অ্যাডমিন যাচাই করে অনুমোদন দেবেন।", "Send for approval": "অনুমোদনের জন্য পাঠান", "Back": "ফিরে যান",
   "Transaction ID": "ট্রানজেকশন আইডি", "Payment screenshot": "পেমেন্টের স্ক্রিনশট", "Upload the payment screenshot": "পেমেন্টের স্ক্রিনশট দিন", "Sent. The admin will check and approve it.": "পাঠানো হয়েছে। অ্যাডমিন যাচাই করে অনুমোদন দেবেন।", "Fees": "ফি", "All paid": "সব পরিশোধিত", "Salary": "বেতন", "Not paid yet": "এখনো পরিশোধিত নয়",
 });

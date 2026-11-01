@@ -7,6 +7,20 @@ import { calcBatch, statRow, rollOf, rollPrefix, counterKey, defaultBatches, fin
 export const active = (u) => u.active !== false && u.ap !== false;
 const byBatch = (a, b) => (+a.cls || 99) - (+b.cls || 99) || cmp(a.grp, b.grp) || cmp(a.name, b.name);
 
+// ---------- signed-in person ----------
+// Builds S.me from a profile document. A teacher with `ca` is a co-admin (me.co = true).
+export function setMe(pid, data) {
+  nc = { t: 0, p: null };
+  S.pid = pid;
+  S.me = { ...data, id: pid, co: data.role === "teacher" && data.ca === true };
+  return S.me;
+}
+export async function reloadMe() {
+  const d = await db.get("users/" + S.pid);
+  if (d) setMe(S.pid, d);
+  return S.me;
+}
+
 // ---------- loading ----------
 export async function loadInst() {
   try { S.INST = (await db.get("config/inst")) || {}; } catch (e) { S.INST = {}; }
@@ -51,18 +65,32 @@ export const monthStart = () => T().slice(0, 8) + "01";
 
 // ---------- notifications and activity log ----------
 // to: "batch" (needs bid), "admin", or a person id
-export const notify = (to, text, bid) => db.add("nt", { to, t: text, d: Date.now(), ...(bid ? { bid } : {}) }).catch(() => {});
+// document id that sorts NEWEST FIRST, so a list can read just the latest few (db.recent)
+export const timeId = () => String(9e12 - Date.now()).padStart(13, "0") + Math.random().toString(36).slice(2, 7);
+export const notify = (to, text, bid) => db.set("nt/" + timeId(), { to, t: text, d: Date.now(), ...(bid ? { bid } : {}) }).catch(() => {});
+// co-admins are logged for the admin (log); plain teachers leave a notice for the admin (alerts)
 export const logAct = (msg) => {
-  if (!S.me || !S.me.co) return;
-  const b = S.B.find((x) => x.id === S.bid);
-  db.add("log", { uid: S.pid, by: S.me.name, msg: msg + (b ? " (" + b.name + ")" : ""), t: Date.now() }).catch(() => {});
+  const me = S.me;
+  if (!me || me.role === "student" || (me.role === "admin" && !me.co)) return;
+  const b = S.B.find((x) => x.id === S.bid), text = msg + (b ? " (" + b.name + ")" : "");
+  if (me.co) db.set("log/" + timeId(), { uid: S.pid, by: me.name, msg: text, t: Date.now() }).catch(() => {});
+  else if (b) db.set("nt/" + timeId(), { to: "admin", t: me.name + ": " + text, d: Date.now(), bid: b.id }).catch(() => {});
 };
-export async function getNotices() {
+let nc = { t: 0, p: null };
+// the bell and the dashboard both ask: share one answer for a few seconds (force = true after sending a notice)
+export function getNotices(force = false) {
+  if (!force && nc.p && Date.now() - nc.t < 15000) return nc.p;
+  nc = { t: Date.now(), p: loadNotices() };
+  nc.p.catch(() => { nc = { t: 0, p: null }; });
+  return nc.p;
+}
+async function loadNotices() {
   const me = S.me;
   let q;
-  if (me.role === "student") q = await Promise.all([me.bid ? db.list("nt", ["to", "==", "batch"], ["bid", "==", me.bid]) : [], db.list("nt", ["to", "==", S.pid])]);
-  else if (me.role === "teacher" && !me.co) q = await Promise.all([...(me.bids || []).map((b) => db.list("nt", ["to", "==", "batch"], ["bid", "==", b])), db.list("nt", ["to", "==", S.pid])]);
-  else q = [await db.list("nt", ["to", "==", "admin"]), await db.list("nt", ["to", "==", S.pid])];
+  const N = 25;
+  if (me.role === "student") q = await Promise.all([me.bid ? db.recent("nt", N, ["to", "==", "batch"], ["bid", "==", me.bid]) : [], db.recent("nt", N, ["to", "==", S.pid])]);
+  else if (me.role === "teacher" && !me.co) q = await Promise.all([...(me.bids || []).map((b) => db.recent("nt", N, ["to", "==", "batch"], ["bid", "==", b])), db.recent("nt", N, ["to", "==", S.pid])]);
+  else q = [await db.recent("nt", N, ["to", "==", "admin"]), await db.recent("nt", N, ["to", "==", S.pid])];
   return q.flat().sort((a, b) => b.d - a.d).slice(0, 40);
 }
 export const seenKey = () => "seen" + S.pid;
@@ -146,7 +174,7 @@ export async function selfRegister(d) {
         await tdb.set("users/" + uid, { ...base, roll, active: true, mustChange: false, ap: false });
         await tdb.set("login/" + lkKey, { es: [email] });
         await tdb.set("cn/" + key, { n }).catch(() => {});
-        await tdb.add("reg", { role: d.role, name: d.name, phone: d.phone, email: d.email, roll, st: "auto", t: Date.now() }).catch(() => {});
+        await tdb.set("reg/" + timeId(), { role: d.role, name: d.name, phone: d.phone, email: d.email, roll, st: "auto", t: Date.now() }).catch(() => {});
       });
       return { roll, email, pw: d.pw };
     } catch (e) { if (isEmailInUse(e)) continue; throw e; }
@@ -234,7 +262,7 @@ export async function delFile(id) {
 export async function downloadFile(id, progress) {
   const m = await db.get("fl/" + id);
   if (!m) throw new Error("File not found");
-  if (m.link) { window.open(m.link, "_blank", "noopener"); return; }
+  if (m.link) { if (/^https?:\/\//i.test(m.link)) window.open(m.link, "_blank", "noopener"); return; }
   const parts = [], n = m.n || 1;
   for (let i = 0; i < n; i++) {
     if (progress) progress(i + 1, n);

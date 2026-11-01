@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Rise Edge Academy</title>
+<meta name="theme-color" content="#07122c">
+<meta name="description" content="Rise Edge Academy - student, teacher and admin portal">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anek+Bangla:wght@400;600;700;800&family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+<link rel="modulepreload" href="pages-home.js">
+<link rel="modulepreload" href="pages-people.js">
+<link rel="modulepreload" href="pages-account.js">
+<link rel="modulepreload" href="pages-attendance.js">
+<link rel="modulepreload" href="pages-exams.js">
+<link rel="modulepreload" href="pages-results.js">
+<link rel="modulepreload" href="pages-fees.js">
+<link rel="modulepreload" href="pages-content.js">
+</head>
+<body>
+<div id="app"><div class="loading"><img src="logo.jpg" alt=""><div class="spin"></div><div id="boot-msg">Loading…</div></div></div>
+<script>
+// If the app cannot start (old browser, blocked network, a mistake in config.js) say so instead of a blank page.
+(function () {
+  var shown = false;
+  function fail(msg) {
+    if (shown || window.__riseReady) return;
+    shown = true;
+    var a = document.getElementById("app");
+    if (a) a.innerHTML = '<div class="loading"><img src="logo.jpg" alt=""><h2>The app could not start</h2><p class="mut" style="max-width:420px">' +
+      String(msg || "").replace(/[<>&]/g, "") + '</p><p><a href="check.html">Open the setup check</a> &nbsp;·&nbsp; <a href="./" onclick="location.reload();return false">Try again</a></p></div>';
+  }
+  window.addEventListener("error", function (e) { fail(e && (e.message || (e.error && e.error.message))); });
+  window.addEventListener("unhandledrejection", function (e) { fail(e && e.reason && (e.reason.message || e.reason)); });
+  setTimeout(function () { fail("It is taking too long. Check the internet connection."); }, 20000);
+})();
+</script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

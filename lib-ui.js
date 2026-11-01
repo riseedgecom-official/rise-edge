@@ -1,6 +1,6 @@
 // Small UI toolkit: icons, form fields, cards, dialogs. Everything returns HTML strings
 // (or promises, for dialogs) so pages stay short.
-import { esc, t, $, $$, formData } from "./lib-core.js";
+import { esc, t, $, $$, formData, S } from "./lib-core.js";
 
 // ---------- icons (24x24, stroke) ----------
 const IC = {
@@ -133,6 +133,14 @@ export function select(name, options, value = "", { label, hint = "", ...rest } 
 export const clsOptions = () => [["", t("Class")], ...[4, 5, 6, 7, 8, 9, 10, 11, 12].map((c) => [String(c), t("Class {n}", { n: c })])];
 export const grpOptions = (allLabel) => [["", allLabel || t("Group")], ["Science", t("Science")], ["Commerce", t("Commerce")], ["Arts", t("Arts")]];
 export const grpLabel = (g) => (g ? t(g) : "");
+
+// Batch chooser used at the top of most pages. Changing it fires the "pick-batch" handler (app.js) and redraws.
+export function batchPicker() {
+  if (!S.B.length) return "";
+  if (S.B.length === 1) return `<div class="row mb">${tag(S.B[0].name, "info")}</div>`;
+  const o = S.B.map((b) => `<option value="${esc(b.id)}" ${b.id === S.bid ? "selected" : ""}>${esc(b.name)}</option>`).join("");
+  return `<div class="mb"><select data-change="pick-batch" aria-label="${esc(t("Batch"))}">${o}</select></div>`;
+}
 
 // ---------- dialogs ----------
 let mods = [];

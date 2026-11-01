@@ -320,6 +320,11 @@ table.tbl{width:100%;border-collapse:collapse;font-size:14px}
 .idc-f small{display:block;font-size:10px;color:#44547a}
 .idc-f b{display:block;font-size:13px;word-break:break-word;line-height:1.25}
 .idc-foot{width:100%;display:flex;justify-content:space-between;font-size:10px;color:#44547a;border-top:1px solid #cdd8ee;padding-top:6px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.welcome{display:flex;align-items:center;gap:14px;margin:0 0 14px}.welcome h2{margin:0;font-size:20px}.welcome p{margin:2px 0 0}
+.idc-sheet{display:flex;flex-wrap:wrap;gap:16px;justify-content:center;padding:8px 0}
+.idc-sheet .idc{break-inside:avoid;page-break-inside:avoid}
+@media print{.idc-sheet{gap:10px;justify-content:flex-start}.idc{box-shadow:none;border:1px solid #cdd8ee}}
 .idc--back .idc-in{align-items:stretch;justify-content:center;text-align:center}
 .idc--back p{font-size:12px;margin:0 0 6px}
 
@@ -334,3 +339,19 @@ table.tbl{width:100%;border-collapse:collapse;font-size:14px}
 .medal--3{background:#e8b48a;border-color:#a8683a;color:#3b1d06}
 .medal--n{background:var(--soft);border-color:var(--line-2);color:var(--ink)}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+
+/* sidebar footer + language switch */
+.side-f{padding:10px 12px 14px;border-top:1px solid #16264f;display:flex;gap:8px;align-items:center}
+.side-f .btn{flex:1;min-height:40px;background:transparent;color:#cfdaf5;border-color:#2a3d73}
+.side-f .btn:hover{background:rgba(255,255,255,.07)}
+.langsw{display:inline-flex;border:1.5px solid var(--line-2);border-radius:99px;overflow:hidden;background:var(--card)}
+.langsw button{border:0;background:none;padding:6px 12px;font-weight:700;font-size:13px;cursor:pointer;color:var(--ink-2)}
+.langsw button.on{background:var(--ink);color:var(--paper)}
+.side-f .langsw{border-color:#2a3d73;background:transparent}
+.side-f .langsw button{color:#8fb4ff}
+.side-f .langsw button.on{background:#1d4fb8;color:#fff}
+.page-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.page-h h2{flex:1;min-width:0}
+.hint{display:block;color:var(--ink-2);font-size:12px}
+.gs-btn{display:grid}
+@media(min-width:760px){.gs-btn{display:none}}

@@ -64,12 +64,18 @@ export const S = {
 };
 export const isStaff = () => !!S.me && (S.me.role === "admin" || S.me.co);
 export const isAdmin = () => !!S.me && S.me.role === "admin" && !S.me.co;
-export const isTeacher = () => !!S.me && S.me.role === "teacher";
+export const isTeacher = () => !!S.me && S.me.role === "teacher" && !S.me.co; // a plain teacher (not a co-admin)
+export const canPublish = () => isStaff() || (isTeacher() && S.me.pub === true); // may publish exam results / reports
+export const canFees = () => isAdmin();
 export const isStudent = () => !!S.me && S.me.role === "student";
 export const batchOf = (id) => S.B.find((b) => b.id === id);
 export const curBatch = () => batchOf(S.bid);
 export const activeStudents = (bid = S.bid) => S.U.filter((s) => s.bid === bid && s.active !== false && s.ap !== false);
+export const batchName = (id) => (batchOf(id) || {}).name || "";
 export const instName = () => S.INST.name || "Rise Edge Academy";
+
+// add (merge) Bangla translations: addBN({"English text": "বাংলা"})
+export const addBN = (o) => Object.assign(BN, o);
 
 // ---------- language ----------
 export function initLang() {
@@ -157,3 +163,17 @@ export function parseHash() {
 }
 // remembered per-page UI state: pageState("att") -> object kept while the app is open
 export const pageState = (k) => (S.q[k] = S.q[k] || {});
+
+// ---------- pages ----------
+// A page module calls page("students", async (params) => htmlString, {title: "Students"}).
+// app.js shows the returned HTML inside the shell. refresh() draws the current page again.
+export const PAGES = {};
+export const page = (name, render, opt = {}) => { PAGES[name] = { render, ...opt }; };
+let refresher = () => {};
+export const setRefresher = (fn) => { refresher = fn; };
+export const refresh = () => refresher();
+
+// ---------- phone links (open the user's own SMS / WhatsApp app) ----------
+export const smsHref = (phone, text) => "sms:" + intlPhone(phone) + "?body=" + encodeURIComponent(text);
+export const waHref = (phone, text) => "https://wa.me/" + intlPhone(phone) + "?text=" + encodeURIComponent(text);
+export const copyText = async (s) => { try { await navigator.clipboard.writeText(s); return true; } catch (e) { return false; } };

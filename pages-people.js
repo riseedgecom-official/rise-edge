@@ -242,12 +242,12 @@ act("ap-no", async (el) => {
   await removeUser(u); closeModals(); await reload(); toast(t("Rejected"), "ok");
 });
 page("approvals", async () => {
-  const [fps, regs, rc] = await Promise.all([db.list("fp", ["st", "==", "new"]).catch(() => []), db.list("reg").catch(() => []), db.get("config/reg").catch(() => null)]);
+  const [fps, regs, rc] = await Promise.all([db.list("fp", ["st", "==", "new"]).catch(() => []), db.recent("reg", 30).catch(() => []), db.get("config/reg").catch(() => null)]);
   const open = !rc || rc.open !== false;
   const pend = S.PEND.map((u) => row({ av: avatar(u), title: u.name, sub: esc([u.role === "teacher" ? t("Teacher") : t("Student"), u.roll, clsLabel(u), u.phone].filter(Boolean).join(" · ")), right: `${btn(t("Approve"), "ap-yes", { arg: u.id, kind: "pri", sm: true })}${btn(t("Reject"), "ap-no", { arg: u.id, kind: "bad", sm: true })}`, act: "open-user", arg: u.id })).join("");
   const fp = fps.sort((a, b) => b.t - a.t).map((r) => row({ title: r.name || r.roll, sub: esc([r.roll, r.phone, ago(r.t)].filter(Boolean).join(" · ")), right: `${btn(t("New password"), "ap-fp", { arg: r.id, kind: "pri", sm: true })}${btn(t("Dismiss"), "ap-fpx", { arg: r.id, sm: true })}`, })).join("");
   const rg = regs.sort((a, b) => b.t - a.t).slice(0, 30).map((r) => row({ title: r.name, sub: esc([r.role === "teacher" ? t("Teacher") : t("Student"), r.roll, r.phone, ago(r.t)].filter(Boolean).join(" · ")) })).join("");
-  return `${card(t("Self-registration"), `<div class="check" style="border:0"><span><b>${esc(open ? t("Open") : t("Closed"))}</b><span class="mut sm"> ${esc(t("New people can register on the sign-in page."))}</span></span><button class="sw" aria-pressed="${open}" data-act="ap-open" aria-label="${esc(t("Self-registration"))}"></button></div>`)}
+  return `${card(t("Self-registration"), `<div class="check" style="border:0"><span><b>${esc(open ? t("Registration open") : t("Registration closed"))}</b><span class="mut sm"> ${esc(t("New people can register on the sign-in page."))}</span></span><button class="sw" aria-pressed="${open}" data-act="ap-open" aria-label="${esc(t("Self-registration"))}"></button></div>`)}
     <div class="mt">${card(t("Waiting for approval") + " (" + S.PEND.length + ")", pend ? `<div class="list">${pend}</div>` : empty(t("Nobody is waiting."), "check"))}</div>
     <div class="mt">${card(t("Forgot password requests") + " (" + fps.length + ")", fp ? `<div class="list">${fp}</div>` : empty(t("No requests."), "key"))}</div>
     <div class="mt">${card(t("Recent registrations"), rg ? `<div class="list">${rg}</div>` : empty(t("Nothing yet."), "inbox"))}</div>`;
@@ -319,7 +319,7 @@ act("bat-del", async (el) => {
 // ---------- co-admin panel (admin only) ----------
 page("coadmin", async () => {
   const cos = S.TC.filter((x) => x.ca), others = S.TC.filter((x) => !x.ca && x.active !== false);
-  const log = (await db.list("log").catch(() => [])).sort((a, b) => b.t - a.t).slice(0, 100);
+  const log = (await db.recent("log", 100).catch(() => [])).sort((a, b) => b.t - a.t);
   return `${card(t("Co-admins") + ` (${cos.length}/${MAX_CO})`, `${cos.length ? `<div class="list">${cos.map((x) => row({ av: avatar(x), title: x.name, sub: esc([x.roll, x.phone].filter(Boolean).join(" · ")), right: btn(t("Remove"), "tch-co", { arg: x.id, sm: true, kind: "bad" }), act: "open-user", arg: x.id })).join("")}</div>` : empty(t("No co-admin yet."), "shield")}
       ${cos.length < MAX_CO && others.length ? `<div class="inline mt">${select("who", [["", t("Choose a teacher")], ...others.map((x) => [x.id, x.name])], "", { id: "ca-who" })}${btn(t("Make co-admin"), "ca-make", { kind: "pri" })}</div>` : ""}
       <p class="mut sm mt">${esc(t("Co-admins manage students, batches, attendance, exams and results. They never see fees or salary."))}</p>`)}
@@ -334,24 +334,25 @@ act("ca-make", async () => {
 });
 
 addBN({
+  "Registration open": "রেজিস্ট্রেশন চালু", "Registration closed": "রেজিস্ট্রেশন বন্ধ",
   "{inst}: login ID {roll}, password {pw}. Please change the password after you sign in.": "{inst}: লগইন আইডি {roll}, পাসওয়ার্ড {pw}। সাইন ইনের পর পাসওয়ার্ড বদলে নিন।",
   "Login ID": "লগইন আইডি", "Copy": "কপি", "Copied": "কপি হয়েছে", "Could not copy": "কপি করা গেল না", "Email sent": "ইমেইল পাঠানো হয়েছে", "Your login details": "আপনার লগইন তথ্য",
-  "Give this to the person. The password is shown only now.": "এটি ব্যক্তিকে দিন। পাসওয়ার্ড শুধু এখনই দেখা যাবে।", "Done": "শেষ", "Student added": "ছাত্র যোগ হয়েছে", "Teacher added": "শিক্ষক যোগ হয়েছে",
-  "No students found.": "কোনো ছাত্র পাওয়া যায়নি।", "students": "জন ছাত্র", "Show more": "আরও দেখান", "Search by name, roll, phone": "নাম, রোল, ফোন দিয়ে খুঁজুন", "All": "সব", "All groups": "সব বিভাগ",
+  "Give this to the person. The password is shown only now.": "এটি ব্যক্তিকে দিন। পাসওয়ার্ড শুধু এখনই দেখা যাবে।", "Done": "সম্পন্ন", "Student added": "ছাত্র যোগ হয়েছে", "Teacher added": "শিক্ষক যোগ হয়েছে",
+  "No students found.": "কোনো ছাত্র পাওয়া যায়নি।", "students": "জন ছাত্র", "Show more": "আরও দেখান", "Search by name, roll, phone": "নাম, রোল, ফোন দিয়ে খুঁজুন", "All": "সব", "All groups": "সব গ্রুপ",
   "Guardian name": "অভিভাবকের নাম", "Class (optional)": "ক্লাস (ঐচ্ছিক)", "Enter the name.": "নাম দিন।", "Choose the class.": "ক্লাস বেছে নিন।", "Choose the group (Science / Commerce / Arts).": "বিভাগ বেছে নিন (বিজ্ঞান / ব্যবসায় শিক্ষা / মানবিক)।",
   "Not found": "পাওয়া যায়নি", "Can publish": "প্রকাশ করতে পারে", "Waiting for approval": "অনুমোদনের অপেক্ষায়", "Inactive": "নিষ্ক্রিয়", "Blood group": "রক্তের গ্রুপ", "Personal monthly fee": "ব্যক্তিগত মাসিক ফি",
   "Approve": "অনুমোদন", "Reject": "বাতিল", "Edit": "সম্পাদনা", "ID card": "আইডি কার্ড", "Move batch": "ব্যাচ বদলান", "Batches": "ব্যাচ", "Personal fee": "ব্যক্তিগত ফি", "Remove co-admin": "কো-অ্যাডমিন সরান", "Make co-admin": "কো-অ্যাডমিন বানান",
-  "Stop publish rights": "প্রকাশের অধিকার বন্ধ", "Allow publishing": "প্রকাশের অনুমতি দিন", "New password": "নতুন পাসওয়ার্ড", "Deactivate": "নিষ্ক্রিয় করুন", "Reactivate": "আবার চালু করুন", "Delete": "মুছে ফেলুন", "Close": "বন্ধ",
+  "Stop publish rights": "প্রকাশের অধিকার বন্ধ", "Allow publishing": "প্রকাশের অনুমতি দিন", "New password": "নতুন পাসওয়ার্ড", "Deactivate": "নিষ্ক্রিয় করুন", "Reactivate": "আবার চালু করুন", "Delete": "মুছুন", "Close": "বন্ধ করুন",
   "Amount (৳). Leave 0 to use the batch / default fee.": "পরিমাণ (৳)। ০ রাখলে ব্যাচ / সাধারণ ফি প্রযোজ্য।", "Make a new temporary password for {n}? The old password stops working.": "{n} এর জন্য নতুন অস্থায়ী পাসওয়ার্ড বানাবেন? পুরনো পাসওয়ার্ড আর চলবে না।",
   "Make new password": "নতুন পাসওয়ার্ড বানান", "Delete {n} for good? This cannot be undone.": "{n} কে চিরতরে মুছবেন? এটি ফেরানো যাবে না।", "Deleted": "মুছে ফেলা হয়েছে", "No teachers yet.": "এখনো কোনো শিক্ষক নেই।", "Add teacher": "শিক্ষক যোগ করুন",
   "Batches of {n}": "{n} এর ব্যাচ", "At most {n} co-admins.": "সর্বোচ্চ {n} জন কো-অ্যাডমিন।", "{n} will be able to manage students, batches, attendance and results (not fees).": "{n} ছাত্র, ব্যাচ, উপস্থিতি ও ফলাফল পরিচালনা করতে পারবেন (ফি নয়)।",
   "Registration approved": "রেজিস্ট্রেশন অনুমোদিত", "Your registration at {n} is approved. Login ID: {id}. You can use everything now.": "{n} এ আপনার রেজিস্ট্রেশন অনুমোদিত হয়েছে। লগইন আইডি: {id}। এখন সবকিছু ব্যবহার করতে পারবেন।",
-  "Approved": "অনুমোদিত", "Reject {n}? The account is deleted.": "{n} কে বাতিল করবেন? অ্যাকাউন্ট মুছে যাবে।", "Rejected": "বাতিল করা হয়েছে", "Self-registration": "নিজে রেজিস্ট্রেশন", "Open": "চালু", "Closed": "বন্ধ",
+  "Approved": "অনুমোদিত", "Reject {n}? The account is deleted.": "{n} কে বাতিল করবেন? অ্যাকাউন্ট মুছে যাবে।", "Rejected": "বাতিল হয়েছে", "Self-registration": "নিজে রেজিস্ট্রেশন", "Open": "খুলুন", "Closed": "বন্ধ",
   "New people can register on the sign-in page.": "নতুন মানুষ সাইন ইন পাতা থেকে রেজিস্ট্রেশন করতে পারে।", "Nobody is waiting.": "কেউ অপেক্ষায় নেই।", "Forgot password requests": "পাসওয়ার্ড ভোলার অনুরোধ", "No requests.": "কোনো অনুরোধ নেই।",
   "Recent registrations": "সাম্প্রতিক রেজিস্ট্রেশন", "Nothing yet.": "এখনো কিছু নেই।", "Dismiss": "বাদ দিন", "No account with this ID: {id}": "এই আইডির কোনো অ্যাকাউন্ট নেই: {id}", "Search batch": "ব্যাচ খুঁজুন", "Add batch": "ব্যাচ যোগ করুন",
   "{n} students": "{n} জন ছাত্র", "Month from {d}": "মাস শুরু {d}", "No batch found.": "কোনো ব্যাচ পাওয়া যায়নি।", "Batch name": "ব্যাচের নাম", "Enter the batch name.": "ব্যাচের নাম দিন।", "Month start date": "মাসের শুরুর তারিখ",
   "The month started on (changing it recalculates ranks)": "মাস শুরু হয়েছে (বদলালে র‍্যাঙ্ক আবার হিসাব হবে)", "Choose a date.": "তারিখ বেছে নিন।", "Move or delete its {n} students first.": "আগে এর {n} জন ছাত্রকে সরান বা মুছুন।",
-  "Delete batch {n}?": "ব্যাচ {n} মুছবেন?", "Delete batch": "ব্যাচ মুছুন", "Co-admins": "কো-অ্যাডমিন", "No co-admin yet.": "এখনো কো-অ্যাডমিন নেই।", "Choose a teacher": "একজন শিক্ষক বেছে নিন", "Remove": "সরান",
+  "Delete batch {n}?": "ব্যাচ {n} মুছবেন?", "Delete batch": "ব্যাচ মুছুন", "Co-admins": "কো-অ্যাডমিন", "No co-admin yet.": "এখনো কোনো কো-অ্যাডমিন নেই।", "Choose a teacher": "একজন শিক্ষক বেছে নিন", "Remove": "সরান",
   "Co-admins manage students, batches, attendance, exams and results. They never see fees or salary.": "কো-অ্যাডমিন ছাত্র, ব্যাচ, উপস্থিতি, পরীক্ষা ও ফলাফল পরিচালনা করেন। তারা কখনো ফি বা বেতন দেখেন না।",
   "Activity log": "কার্যকলাপ লগ", "No activity yet.": "এখনো কোনো কার্যকলাপ নেই।",
 });

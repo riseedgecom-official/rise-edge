@@ -7,7 +7,7 @@ import {
 } from "./lib-core.js";
 import { icon, avatar, toast, closeDoc, closeModals, modal, notice, empty, btn } from "./lib-ui.js";
 import { setMe, loadCore, getNotices, unseenCount, ensureDefaultBatches, saveInst, loadInst } from "./lib-svc.js";
-import { renderLogin, renderNotConfigured, forceNewPassword } from "./pages-auth.js";
+import { renderLogin, renderNotConfigured, forceNewPassword, authRedraw } from "./pages-auth.js";
 
 const $app = () => document.getElementById("app");
 const roleCode = () => (isAdmin() ? "a" : isStaff() ? "c" : isTeacher() ? "t" : "s");
@@ -111,9 +111,7 @@ async function render() {
   if (!S.me) return;
   const my = ++rid;
   let { page, params } = parseHash();
-  if (!page || !allowed(page) || !PAGES[page]) {
-    if (page && allowed(page) && !PAGES[page]) { /* module missing: fall through to the error card below */ } else page = "dashboard";
-  }
+  if (!page || !allowed(page)) page = "dashboard";
   S.page = page; S.params = params;
   markNav();
   document.body.classList.remove("menu-open");
@@ -144,10 +142,15 @@ function registerActions() {
   act("nav", (el) => { document.body.classList.remove("menu-open"); closeDoc(); go(el.dataset.arg); });
   act("retry", () => render());
   act("logout", async () => { closeDoc(); closeModals(); await signOutNow(); });
-  act("lang", (el) => { setLang(el.dataset.arg); drawShell(); lastPage = ""; render(); });
+  act("lang", (el) => {
+    setLang(el.dataset.arg);
+    if (S.me) { drawShell(); lastPage = ""; render(); } else authRedraw();
+  });
   act("doc-print", () => window.print());
   act("doc-close", () => closeDoc());
   onChange("pick-batch", (el) => { S.bid = el.value; render(); });
+  window.addEventListener("rise-seen", () => { S.unseen = 0; setBell(); });
+  window.addEventListener("rise-me", () => { if (S.me) { drawShell(); lastPage = ""; render(); } });
 
   // search (admin / co-admin): name, nickname, roll, phone, guardian phone, school
   const results = (q) => {
@@ -178,6 +181,7 @@ async function start(u) {
   if (!u) {
     S.me = null; S.pid = null; S.B = []; S.U = []; S.TC = []; S.PEND = []; S.bid = null; S.unseen = 0; lastPage = "";
     document.body.classList.remove("menu-open");
+    window.__riseReady = true;
     await renderLogin(S.loginMsg || ""); S.loginMsg = "";
     return;
   }
@@ -226,8 +230,9 @@ async function boot() {
   if (!configured) { window.__riseReady = true; return renderNotConfigured(); }
   // page modules: one broken file must not stop the others
   S.moduleErrors = [];
-  const mods = ["pages-home.js", "pages-people.js", "pages-class.js", "pages-results.js", "pages-fees.js", "pages-content.js"];
-  await Promise.all(mods.map((m) => import("./" + m).catch((e) => { console.error(m, e); S.moduleErrors.push(m + ": " + (e && e.message)); })));
+  const mods = ["pages-home.js", "pages-people.js", "pages-account.js", "pages-attendance.js", "pages-exams.js", "pages-results.js", "pages-fees.js", "pages-content.js"];
+  // one after the other, in a fixed order, so the texts of the modules are always added in the same order (the files are preloaded in index.html)
+  for (const m of mods) await import("./" + m).catch((e) => { console.error(m, e); S.moduleErrors.push(m + ": " + (e && e.message)); });
   onAuth((u) => { start(u).catch((e) => { console.error(e); S.loginMsg = dbError(e); signOutNow().catch(() => {}); }); });
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
     navigator.serviceWorker.register("sw.js").catch(() => {});

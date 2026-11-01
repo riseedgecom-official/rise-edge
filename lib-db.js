@@ -4,11 +4,11 @@ import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.
 import {
   initializeAuth, getAuth, browserLocalPersistence, indexedDBLocalPersistence,
   signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut,
-  onAuthStateChanged, updatePassword, EmailAuthProvider, reauthenticateWithCredential,
+  onAuthStateChanged, updatePassword, EmailAuthProvider, reauthenticateWithCredential, sendPasswordResetEmail,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, deleteDoc,
-  collection, query, where, writeBatch,
+  collection, query, where, limit, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { cfg } from "./config.js";
 
@@ -41,6 +41,12 @@ function makeApi(fs) {
       const c = collection(fs, ...seg(path));
       const q = conds.length ? query(c, ...conds.map(([f, o, v]) => where(f, o, v))) : c;
       return (await getDocs(q)).docs.map(snapOf);
+    },
+    // newest first, at most n: documents created with newId-by-time (see timeId in lib-svc) sort newest first by name,
+    // so this needs no index and reads only n documents
+    async recent(path, n, ...conds) {
+      const c = collection(fs, ...seg(path));
+      return (await getDocs(query(c, ...conds.map(([f, o, v]) => where(f, o, v)), limit(n)))).docs.map(snapOf);
     },
     async set(path, data, merge) {
       await setDoc(doc(fs, ...seg(path)), clean(data), merge ? { merge: true } : undefined);
@@ -79,6 +85,7 @@ export const authEmail = (key) => String(key).trim().toLowerCase() + "@rise.loca
 export const onAuth = (cb) => onAuthStateChanged(auth, cb);
 export const signIn = (email, pw) => signInWithEmailAndPassword(auth, email, pw);
 export const signOutNow = () => signOut(auth);
+export const sendReset = (email) => sendPasswordResetEmail(auth, email);
 export const currentUid = () => (auth.currentUser ? auth.currentUser.uid : null);
 export const currentEmail = () => (auth.currentUser ? auth.currentUser.email : "");
 
