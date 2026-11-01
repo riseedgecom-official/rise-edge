@@ -2,9 +2,9 @@
 import { db } from "./lib-db.js";
 import {
   S, esc, t, page, act, onInput, onChange, onSubmit, formData, pageState, refresh, isStaff, isAdmin, isStudent, instName, T, fmtDate,
-  smsHref, waHref, addBN, activeStudents, curBatch, f1, n2,
+  smsHref, waHref, addBN, activeStudents, curBatch, f1, n2, batchOf,
 } from "./lib-core.js";
-import { icon, avatar, tag, empty, notice, card, row, btn, chips, input, select, textarea, batchPicker, ring, ask, form, toast } from "./lib-ui.js";
+import { icon, avatar, tag, empty, notice, card, row, btn, chips, input, select, textarea, batchPicker, ring, ask, form, toast, modal } from "./lib-ui.js";
 import { batchData, dropBatchCache, recalcBatch, getStats, notify, logAct, sendMail, downloadFile, delFile } from "./lib-svc.js";
 
 const noBatch = () => empty(S.me && S.me.role === "student" ? t("You are not in a batch yet.") : t("Add a batch first."), "layers");
@@ -217,7 +217,7 @@ function guardRow(r, i) {
   const s = r.s, text = t("Dear Guardian, ") + r.txt, p = s.gphone;
   const b = (href, ic, label, ext = "") => `<a class="btn btn--xs" ${ext} href="${esc(href)}">${icon(ic)}${label}</a>`;
   return `<div class="gr">
-    <div class="gr-id">${avatar(s, 52)}<b>${esc(s.nick || s.name)}</b><span class="mut">${esc(s.roll || "")}</span>${r.tt ? `<span class="mut gr-m">${esc(r.g + "/" + r.tt + (r.rk ? " · #" + r.rk : ""))}</span>` : ""}</div>
+    <div class="gr-id"><button type="button" class="gr-pic" data-act="gr-info" data-arg="${i}" aria-label="${esc(s.name)}">${avatar(s, 52)}</button><b>${esc(s.nick || s.name)}</b><span class="mut">${esc(s.roll || "")}</span>${r.tt ? `<span class="mut gr-m">${esc(r.g + "/" + r.tt + (r.rk ? " · #" + r.rk : ""))}</span>` : ""}</div>
     <div class="gr-a">${p ? b(waHref(p, text), "phone", "WhatsApp", 'target="_blank" rel="noopener"') + b(smsHref(p, text), "sms", "SMS") : `<span class="mut sm">${esc(t("No guardian phone."))}</span>`}${s.gem ? btn(t("Email"), "gr-one", { arg: i, ic: "mail", xs: true }) : ""}</div>
   </div>`;
 }
@@ -233,6 +233,17 @@ page("guardian", async () => {
   ${card(t("Send result to guardians"), `<p class="mut">${esc(t("Tap SMS or WhatsApp for each guardian (free, uses your own phone). Email works when a guardian email is saved."))}</p>${btn(t("Email all guardians"), "gr-all", { kind: "pri", ic: "mail" })}`)}
   <div class="card mt"><div class="list">${GR.map(guardRow).join("")}</div></div>`;
 }, { title: "Guardian results" });
+// tap the photo: the student's details (read only)
+act("gr-info", (el) => {
+  const r = GR[+el.dataset.arg];
+  if (!r) return;
+  const s = r.s, kv = (k, v) => (v ? `<div class="item"><div class="item-b"><span class="mut">${esc(k)}</span><b>${esc(v)}</b></div></div>` : "");
+  const cls = s.cls ? t("Class {n}", { n: s.cls }) + (s.grp ? " · " + t(s.grp) : "") : "";
+  const m = modal(`<div class="row-nw">${avatar(s, 56)}<div class="sp"><h3 style="margin:0">${esc(s.name)}</h3><span class="mut">${esc(s.roll || "")}</span></div></div>
+    <div class="list mt">${kv(t("Nickname"), s.nick)}${kv(t("Class"), cls)}${kv(t("Batch"), (batchOf(s.bid) || {}).name)}${kv(t("School / college"), s.school)}${kv(t("Phone"), s.phone)}${kv(t("Guardian name"), s.gname)}${kv(t("Guardian's phone"), s.gphone)}${kv(t("Guardian's email"), s.gem)}${kv(t("Blood group"), s.bg)}${kv(t("Address"), s.addr)}${r.tt ? kv(t("Total"), `${r.g}/${r.tt}${r.rk ? " · " + t("Rank") + " #" + r.rk : ""}`) : ""}</div>
+    <div class="mod-f"><button class="btn" data-x>${esc(t("Close"))}</button></div>`);
+  m.body.addEventListener("click", (e) => { if (e.target.closest("[data-x]")) m.close(); });
+});
 onChange("gr-pick", (el) => { pageState("gr").eid = el.value; refresh(); });
 const sendOne = (r, e) => sendMail(r.s.gem, gwho(r.s), t("Result: {e} - {n}", { e: e.title, n: r.s.name }), t("Dear Guardian, ") + r.txt);
 act("gr-one", async (el) => {
