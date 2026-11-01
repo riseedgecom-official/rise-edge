@@ -6,6 +6,7 @@ import {
 import { icon, avatar, tag, empty, notice, card, row, btn, chips, input, textarea, select, batchPicker, ask, toast, grpLabel } from "./lib-ui.js";
 import { putFile, delFile, downloadFile, MAX_FILE, notify, timeId, getNotices, markSeen, seenKey, reloadPeople, recalcBatch } from "./lib-svc.js";
 import { subjectsFor, findBatch } from "./lib-stats.js";
+import { myResults } from "./pages-exams.js";
 
 const noBatch = () => empty(isStudent() ? t("You are not in a batch yet.") : t("Add a batch first."), "layers");
 const kb = (n) => (n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB");
@@ -155,30 +156,76 @@ page("requests", async () => (isStudent() ? studentRequests() : staffRequests())
 async function studentRequests() {
   if (!S.me.bid) return empty(t("You are not in a batch yet."), "layers");
   const st = RQ(); st.k = st.k || "topic";
-  const b = S.B[0] || {}, [L, sd] = await Promise.all([db.list("rq", ["sid", "==", S.pid]), st.k === "topic" ? db.get("sd/" + S.me.bid).catch(() => null) : null]);
+  const b = S.B[0] || {}, [L, sd, XR] = await Promise.all([db.list("rq", ["sid", "==", S.pid]), st.k === "topic" ? db.get("sd/" + S.me.bid).catch(() => null) : null, st.k === "recheck" ? myResults(true) : null]);
   L.sort((a, c) => c.t - a.t);
   const grp = S.me.grp || b.grp || "";
   let fields = "";
   if (st.k === "topic") {
     const subs = subjectsFor(b.cls, grp, sd);
     const cur = subs.find((x) => x.s === st.subj) || subs[0];
-    fields = subs.length ? `<p class="mut">${esc(t("Choose the subject and the topic you want reviewed."))}</p>${select("subj", subs.map((x) => x.s), cur.s, { "data-change": "rq-subj" })}${select("topic", cur.t.map((x) => [x, x]))}${input("d", { placeholder: t("Note (optional)") })}`
+    if (cur) st.subj = cur.s;
+    const pick = (st.pick = st.pick || {});
+    fields = subs.length ? `<p class="mut">${esc(t("Choose the subject, then tick every topic you want reviewed."))}</p>${select("subj", subs.map((x) => x.s), cur.s, { "data-change": "rq-subj" })}
+      <div class="pick">${cur.t.map((x) => `<label class="check"><input type="checkbox" data-change="rq-top" value="${esc(x)}" ${(pick[cur.s] || []).includes(x) ? "checked" : ""}><span>${esc(x)}</span></label>`).join("")}</div>
+      <p class="mut sm" id="rq-cnt">${esc(pickedText())}</p>${input("d", { placeholder: t("Note (optional)") })}`
       : `<p class="mut">${esc(t("No syllabus for this batch yet."))}</p>${input("d", { placeholder: t("Subject and topic") })}`;
-  } else if (st.k === "recheck") fields = input("d", { placeholder: t("Exam name, subject and reason") });
+  } else if (st.k === "recheck") {
+    const wait = new Set(L.filter((q) => q.type === "recheck" && (q.st === "new" || q.st === "seen")).map((q) => q.eid));
+    const X = XR.sort((a, c) => (c.date > a.date ? 1 : c.date < a.date ? -1 : 0));
+    fields = X.length ? `<p class="mut">${esc(t("Choose the exam you want rechecked."))}</p>
+      <div class="pick">${X.map((x) => `<label class="check"><input type="radio" name="ex" data-change="rq-ex" value="${esc(x.eid)}" ${wait.has(x.eid) ? "disabled" : ""} ${st.ex === x.eid ? "checked" : ""}><span><b>${esc(x.title)}</b><span class="mut sm" style="display:block">${esc(fmtDate(x.date))}</span></span>${wait.has(x.eid) ? tag(t("Requested"), "warn") : ""}</label>`).join("")}</div>
+      ${input("d", { placeholder: t("Subject and reason (optional)") })}`
+      : `<p class="mut">${esc(t("No published exam yet."))}</p>`;
+  }
   else if (st.k === "leave") fields = `<div class="grid g2">${input("from", { type: "date", label: t("From"), value: T() })}${input("to", { type: "date", label: t("To") })}</div>${input("d", { placeholder: t("Reason") })}`;
   else if (st.k === "subject") fields = `<p class="mut">${esc(t("Current group"))}: ${esc(grp ? t(grp) : "–")}</p>${select("nv", ["Science", "Commerce", "Arts"].map((g) => [g, t(g)]))}${input("d", { placeholder: t("Reason (optional)") })}`;
   else fields = `<p class="mut">${esc(t("Current"))}: ${esc(S.me.school || "–")}</p>${input("nv", { placeholder: t("New school / college name") })}${input("d", { placeholder: t("Note (optional)") })}`;
   return `${chips(Object.keys(RT).map((k) => ({ k, label: t(RT[k]) })), st.k, "rq-kind")}
-    <form class="card stack-s" data-submit="rq-send"><h3>${esc(t(RT[st.k]))}</h3>${fields}<button class="btn btn--pri" type="submit">${icon("check")}${esc(t("Send request"))}</button></form>
+    <form class="card stack-s" data-submit="rq-send"><h3>${esc(t(RT[st.k]))}</h3>${fields}<button class="btn btn--pri" type="submit" ${st.k === "recheck" && !XR.length ? "disabled" : ""}>${icon("check")}${esc(t("Send request"))}</button></form>
     <div class="mt">${card(t("My requests"), L.length ? `<div class="list">${L.map((q) => `<div class="item"><div class="item-b"><b class="item-t">${esc(t(RT[q.type] || q.type))} ${stBox(q)}</b><span class="mut">${esc(rqTxt(q))} · ${esc(ago(q.t))}</span>${q.rp ? `<span><b>${esc(t("Reply"))}:</b> ${esc(q.rp)}</span>` : ""}</div></div>`).join("")}</div>` : empty(t("No requests yet."), "inbox"))}</div>`;
 }
-act("rq-kind", (el) => { const st = RQ(); st.k = el.dataset.arg; st.subj = ""; refresh(); });
+act("rq-kind", (el) => { const st = RQ(); st.k = el.dataset.arg; st.subj = ""; st.ex = ""; refresh(); });
 onChange("rq-subj", (el) => { RQ().subj = el.value; refresh(); });
+const pickedN = () => Object.values(RQ().pick || {}).reduce((n, a) => n + a.length, 0);
+const pickedText = () => (pickedN() ? t("{n} topics selected", { n: pickedN() }) : t("No topic selected yet."));
+onChange("rq-top", (el) => {
+  const st = RQ(), a = ((st.pick = st.pick || {})[st.subj] = (st.pick || {})[st.subj] || []);
+  const i = a.indexOf(el.value);
+  if (el.checked && i < 0) a.push(el.value);
+  if (!el.checked && i >= 0) a.splice(i, 1);
+  const c = document.getElementById("rq-cnt"); if (c) c.textContent = pickedText();
+});
+onChange("rq-ex", (el) => { RQ().ex = el.value; });
+
+// one recheck request for one exam (used by the Requests page and by the dashboard link)
+async function sendRecheck(x, note = "") {
+  const me = S.me, rc = pageState("rc");
+  rc.done = rc.done || {};
+  const mine = await db.list("rq", ["sid", "==", S.pid]);
+  if (mine.some((q) => q.type === "recheck" && q.eid === x.eid && (q.st === "new" || q.st === "seen"))) { rc.done[x.eid] = 1; toast(t("You already asked for a recheck of this exam."), "bad"); return false; }
+  await db.add("rq", { sid: S.pid, name: me.name, roll: me.roll, bid: me.bid, type: "recheck", h: "t", eid: x.eid, d: (x.title + " · " + fmtDate(x.date) + (note ? " · " + note : "")).slice(0, 400), st: "new", rp: "", t: Date.now() });
+  rc.done[x.eid] = 1;
+  toast(t("Recheck request sent"), "ok");
+  return true;
+}
+act("rc-ask", async (el) => {
+  const x = (await myResults()).find((r) => r.eid === el.dataset.arg);
+  if (!x) return toast(t("Not found"), "bad");
+  await sendRecheck(x);
+  refresh();
+});
 onSubmit("rq-send", async (b) => {
   const f = formData(b.closest("form")), k = RQ().k, me = S.me;
-  const q = { sid: S.pid, name: me.name, roll: me.roll, bid: me.bid, type: k, h: k === "topic" || k === "recheck" ? "t" : "a", d: (f.d || "").trim().slice(0, 300), st: "new", rp: "", t: Date.now() };
+  if (k === "recheck") {
+    const x = (await myResults()).find((r) => r.eid === f.ex);
+    if (!x) return toast(t("Choose the exam"), "bad");
+    if (await sendRecheck(x, (f.d || "").trim().slice(0, 200))) { RQ().ex = ""; refresh(); }
+    return;
+  }
+  const q = { sid: S.pid, name: me.name, roll: me.roll, bid: me.bid, type: k, h: k === "topic" ? "t" : "a", d: (f.d || "").trim().slice(0, 300), st: "new", rp: "", t: Date.now() };
   if (k === "topic") {
-    if (!f.subj || !f.topic) { if (!q.d) return toast(t("Write the details"), "bad"); } else q.d = f.subj + ": " + f.topic + (q.d ? " · " + q.d : "");
+    const parts = Object.entries(RQ().pick || {}).filter(([, a]) => a.length).map(([sub, a]) => sub + ": " + a.join(", "));
+    if (!parts.length) { if (!q.d) return toast(t("Tick at least one topic"), "bad"); } else q.d = (parts.join(" · ") + (q.d ? " · " + q.d : "")).slice(0, 800);
   } else if (k === "leave") {
     q.from = f.from; q.to = f.to || f.from;
     if (!q.from) return toast(t("Choose the leave date"), "bad");
@@ -189,6 +236,7 @@ onSubmit("rq-send", async (b) => {
     if (!q.nv) return toast(t("Write the new school/college name"), "bad");
   } else if (!q.d) return toast(t("Write the details"), "bad");
   await db.add("rq", q);
+  if (k === "topic") RQ().pick = {};
   toast(t("Request sent"), "ok"); refresh();
 });
 
@@ -246,6 +294,9 @@ export async function pendingRequests() {
 }
 
 addBN({
+  "Choose the subject, then tick every topic you want reviewed.": "বিষয় বেছে নিন, তারপর যতগুলো টপিক রিভিউ চান সবকটিতে টিক দিন।", "{n} topics selected": "{n}টি টপিক বাছা হয়েছে", "No topic selected yet.": "এখনো কোনো টপিক বাছা হয়নি।", "Tick at least one topic": "অন্তত একটি টপিকে টিক দিন",
+  "Choose the exam you want rechecked.": "যে পরীক্ষা রিচেক করাতে চান সেটি বেছে নিন।", "Requested": "অনুরোধ করা হয়েছে", "Subject and reason (optional)": "বিষয় ও কারণ (ঐচ্ছিক)", "Choose the exam": "পরীক্ষা বেছে নিন",
+  "Recheck request sent": "রিচেকের অনুরোধ পাঠানো হয়েছে", "You already asked for a recheck of this exam.": "এই পরীক্ষার রিচেক আপনি আগেই চেয়েছেন।",
   "Upload": "আপলোড", "Title": "শিরোনাম", "Link (Google Drive etc.)": "লিংক (গুগল ড্রাইভ ইত্যাদি)", "Or choose a file below.": "অথবা নিচে ফাইল বেছে নিন।", "File (PDF or photo)": "ফাইল (PDF বা ছবি)",
   "Up to {n} MB. Big files take time: keep the app open until it says Saved.": "সর্বোচ্চ {n} MB। বড় ফাইলে সময় লাগে: “সংরক্ষিত” না দেখা পর্যন্ত অ্যাপ খোলা রাখুন।", "Send to batches": "যেসব ব্যাচে পাঠাবেন",
   "Suggestions": "সাজেশন", "Exam solutions": "পরীক্ষার সমাধান", "Link": "লিংক", "Open": "খুলুন", "Download": "ডাউনলোড", "No suggestions yet.": "এখনো কোনো সাজেশন নেই।", "No exam solutions yet.": "এখনো কোনো সমাধান নেই।",

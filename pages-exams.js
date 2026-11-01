@@ -118,7 +118,7 @@ act("ex-sheet", (el) => {
 
 // student side: my published results
 let XS = null, XSt = 0;
-async function myResults(force) {
+export async function myResults(force) {
   if (!force && XS && Date.now() - XSt < 5 * 60e3) return XS;
   try { XS = (await db.list("users/" + S.pid + "/reports")).filter((x) => x.ty === "ex"); } catch (e) { XS = []; }
   XSt = Date.now();
@@ -158,6 +158,17 @@ async function rankInner() {
     (RKX.map(({ e, R }, i) => { const av = R.length ? R.reduce((q, x) => q + (x.t ? (x.g / x.t) * 100 : 0), 0) / R.length : null; return `<details class="card" style="margin:8px 0"><summary><b>${esc(e.title)}</b> <span class="mut">${e.date} · ${esc(t("avg"))} ${f1(av)}</span></summary><div class="list mt">${R.map((r, j) => row({ title: r.s.name, sub: `${esc(r.s.roll || "")} · ${n2(r.g)} / ${n2(r.t)}`, right: `<span class="tag tag--gold">#${r.rk}</span>`, act: "rk-sheet", arg: i + "|" + j })).join("")}</div></details>`; }).join("") || `<p class="mut">${esc(t("No published exam in this period."))}</p>`) +
     (canPublish() && ex.length ? `<div class="mt">${btn(t("Update student results"), "rk-all", { sm: true, ic: "refresh" })}</div>` : "");
 }
+// ---------- student dashboard: latest results, each with a small "need recheck" link ----------
+let RRL = [];
+export async function recentResults() {
+  if (!isStudent()) return "";
+  RRL = (await myResults()).sort((a, b) => (b.date > a.date ? 1 : b.date < a.date ? -1 : 0)).slice(0, 3);
+  if (!RRL.length) return "";
+  const done = pageState("rc").done || {};
+  return `<section class="card"><div class="card-h"><h3>${esc(t("Latest results"))}</h3>${btn(t("See all"), "nav", { arg: "exams", sm: true, kind: "ghost" })}</div>
+    <div class="list">${RRL.map((x, i) => `<div class="item item--click" data-act="rr-open" data-arg="${i}"><div class="item-b"><b class="item-t">${esc(x.title)}</b><span class="mut">${esc(fmtDate(x.date))} · ${n2(x.g)} / ${n2(x.t)} (${f1(x.t ? (x.g / x.t) * 100 : null)})</span>${done[x.eid] ? `<span class="rc rc--ok">${icon("check")}${esc(t("Recheck requested"))}</span>` : `<button type="button" class="rc" data-act="rc-ask" data-arg="${esc(x.eid)}">${icon("edit")}${esc(t("Need recheck"))}</button>`}</div><div class="item-a"><span class="tag tag--gold">#${x.rk} / ${x.n}</span></div></div>`).join("")}</div></section>`;
+}
+act("rr-open", (el) => { const x = RRL[+el.dataset.arg]; if (x) showDoc(resultSheet(x)); });
 export async function ranksBox() { try { return `<section class="card" id="rk-box">${await rankInner()}</section>`; } catch (e) { return ""; } }
 const redrawBox = async () => { const b = document.getElementById("rk-box"); if (b) b.innerHTML = await rankInner(); };
 act("rk-p", (el) => { RK().p = el.dataset.arg; return redrawBox(); });
@@ -283,6 +294,7 @@ act("sy-mine", async () => {
 });
 
 addBN({
+  "Latest results": "সর্বশেষ ফলাফল", "See all": "সব দেখুন", "Need recheck": "রিচেক দরকার", "Recheck requested": "রিচেকের অনুরোধ করা হয়েছে",
   "Exam result sheet": "পরীক্ষার ফলাফল পত্র", "Student": "ছাত্র", "Roll": "রোল", "Batch": "ব্যাচ", "Exam": "পরীক্ষা", "Subject": "বিষয়", "Marks": "নম্বর", "Out of": "পূর্ণমান", "Absent": "অনুপস্থিত", "Total": "মোট", "Grade": "গ্রেড", "Rank": "র‍্যাঙ্ক", "Generated": "তৈরি",
   "New exam": "নতুন পরীক্ষা", "Exam name": "পরীক্ষার নাম", "Date": "তারিখ", "Subjects and total marks": "বিষয় ও পূর্ণমান", "Create exam": "পরীক্ষা তৈরি করুন", "Held": "অনুষ্ঠিত", "Not happened": "হয়নি",
   "Hidden from students": "ছাত্রদের কাছ থেকে লুকানো", "Published to students": "ছাত্রদের জন্য প্রকাশিত", "Publish results": "ফলাফল প্রকাশ করুন", "Hide results": "ফলাফল লুকান", "Marks stay hidden until a teacher with publish permission, or the admin, publishes.": "প্রকাশের অনুমতিপ্রাপ্ত শিক্ষক বা অ্যাডমিন প্রকাশ না করা পর্যন্ত নম্বর লুকানো থাকবে।",

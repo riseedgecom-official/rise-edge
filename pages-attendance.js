@@ -212,6 +212,15 @@ function gRows(e) {
   return R;
 }
 let GR = [];
+// one line per student: photo with nickname and roll below on the left, small send buttons on the right
+function guardRow(r, i) {
+  const s = r.s, text = t("Dear Guardian, ") + r.txt, p = s.gphone;
+  const b = (href, ic, label, ext = "") => `<a class="btn btn--xs" ${ext} href="${esc(href)}">${icon(ic)}${label}</a>`;
+  return `<div class="gr">
+    <div class="gr-id">${avatar(s, 52)}<b>${esc(s.nick || s.name)}</b><span class="mut">${esc(s.roll || "")}</span>${r.tt ? `<span class="mut gr-m">${esc(r.g + "/" + r.tt + (r.rk ? " · #" + r.rk : ""))}</span>` : ""}</div>
+    <div class="gr-a">${p ? b(waHref(p, text), "phone", "WhatsApp", 'target="_blank" rel="noopener"') + b(smsHref(p, text), "sms", "SMS") : `<span class="mut sm">${esc(t("No guardian phone."))}</span>`}${s.gem ? btn(t("Email"), "gr-one", { arg: i, ic: "mail", xs: true }) : ""}</div>
+  </div>`;
+}
 page("guardian", async () => {
   if (!S.bid) return noBatch();
   const st = pageState("gr");
@@ -222,7 +231,7 @@ page("guardian", async () => {
   GR = gRows(e);
   return `${batchPicker()}<div class="mb">${select("eid", E.map((x) => [x.id, x.title + " · " + x.date]), e.id, { "data-change": "gr-pick" })}</div>
   ${card(t("Send result to guardians"), `<p class="mut">${esc(t("Tap SMS or WhatsApp for each guardian (free, uses your own phone). Email works when a guardian email is saved."))}</p>${btn(t("Email all guardians"), "gr-all", { kind: "pri", ic: "mail" })}`)}
-  <div class="card mt"><div class="list">${GR.map((r, i) => row({ av: avatar(r.s, 36), title: r.s.name, sub: esc(r.txt), right: guardianBtns(r.s, t("Dear Guardian, ") + r.txt, "gr-one").replace(`data-arg="${esc(r.s.id)}"`, `data-arg="${i}"`) })).join("")}</div></div>`;
+  <div class="card mt"><div class="list">${GR.map(guardRow).join("")}</div></div>`;
 }, { title: "Guardian results" });
 onChange("gr-pick", (el) => { pageState("gr").eid = el.value; refresh(); });
 const sendOne = (r, e) => sendMail(r.s.gem, gwho(r.s), t("Result: {e} - {n}", { e: e.title, n: r.s.name }), t("Dear Guardian, ") + r.txt);

@@ -103,8 +103,8 @@ export function row({ av = "", title, sub = "", right = "", act, arg, titleHtml 
   return `<div class="item${click}">${av}<div class="item-b"><b class="item-t">${titleHtml || esc(title)}</b>${sub ? `<span class="mut">${sub}</span>` : ""}</div>${right ? `<div class="item-a">${right}</div>` : ""}</div>`;
 }
 
-export const btn = (label, act, { arg, kind = "", ic = "", sm = false, extra = "" } = {}) =>
-  `<button type="button" class="btn ${kind ? "btn--" + kind : ""} ${sm ? "btn--sm" : ""}" data-act="${act}" ${arg != null ? `data-arg="${esc(arg)}"` : ""} ${extra}>${ic ? icon(ic) : ""}${esc(label)}</button>`;
+export const btn = (label, act, { arg, kind = "", ic = "", sm = false, xs = false, extra = "" } = {}) =>
+  `<button type="button" class="btn ${kind ? "btn--" + kind : ""} ${sm ? "btn--sm" : ""} ${xs ? "btn--xs" : ""}" data-act="${act}" ${arg != null ? `data-arg="${esc(arg)}"` : ""} ${extra}>${ic ? icon(ic) : ""}${esc(label)}</button>`;
 
 // chips: items [{k, label}] -> row of pills, data-act=act data-arg=k
 export function chips(items, cur, actName) {

@@ -120,14 +120,14 @@ act("hm-att", (el) => { S.bid = el.dataset.arg; location.hash = "#/attendance"; 
 async function studentHome() {
   const me = S.me, b = S.B[0] || null;
   if (!me.bid || !b) return `${welcome()}${pwNote()}${installCard()}<div class="mt">${empty(t("You are not in a batch yet. The admin will add you to one."), "layers")}</div>`;
-  const [st, fee, cls, nts] = await Promise.all([getStats(me.bid), lazy("pages-fees.js", "feeSummaryCard"), lazy("pages-attendance.js", "todayClasses"), noticeCard()]);
+  const [st, fee, cls, nts, rr] = await Promise.all([getStats(me.bid), lazy("pages-fees.js", "feeSummaryCard"), lazy("pages-attendance.js", "todayClasses"), noticeCard(), lazy("pages-exams.js", "recentResults")]);
   const r = (st.rows || {})[S.pid] || {}, n = st.n || 0;
   const att = (r.p || 0) + (r.a || 0) ? ((r.p || 0) / ((r.p || 0) + (r.a || 0))) * 100 : null;
   return `${welcome(`${b.name} · ${today()}`)}${pwNote()}${installCard()}
   <div class="card mt"><div class="card-h"><h3>${esc(t("This month"))}</h3>${st.from ? `<span class="mut sm">${esc(t("Counted from {d}.", { d: fmtDate(st.from) }))}</span>` : ""}</div>
     <div class="rings">${ring(att, t("Attendance"), "var(--ok)")}${ring(r.ex, t("Exam average"), "#6a4cf0")}${ring(r.hw, t("Homework"), "var(--gold)")}</div>
     <div class="tiles mt">${stat({ ic: "trophy", label: t("Exam rank"), value: r.er ? "#" + r.er : "–", sub: n ? t("of {n} students", { n }) : "", color: "#6a4cf0", ...nav("exams") })}${stat({ ic: "star", label: t("Overall"), value: f1(r.ov), sub: r.or ? t("Rank #{r} of {n}", { r: r.or, n }) : "", color: "var(--blue)", ...nav("reports") })}</div></div>
-  ${cls ? `<div class="mt">${cls}</div>` : ""}${fee ? `<div class="mt">${fee}</div>` : ""}${nts ? `<div class="mt">${nts}</div>` : ""}
+  ${rr ? `<div class="mt">${rr}</div>` : ""}${cls ? `<div class="mt">${cls}</div>` : ""}${fee ? `<div class="mt">${fee}</div>` : ""}${nts ? `<div class="mt">${nts}</div>` : ""}
   <div class="mt">${quick([["homework", "book", "Homework"], ["exams", "clip", "Results"], ["syllabus", "list", "Syllabus"], ["reports", "chart", "Report"], ["requests", "mega", "Requests"], ["idcard", "idcard", "ID card"]])}</div>`;
 }
 
