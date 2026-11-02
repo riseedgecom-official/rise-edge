@@ -95,6 +95,13 @@ export async function changePassword(current, next) {
   await updatePassword(u, next);
 }
 
+// Ask Firebase to check the signed-in person's password again before a risky action. Throws when it is wrong.
+export async function confirmPassword(pw) {
+  const u = auth.currentUser;
+  if (!u || !u.email) throw new Error("Please sign in again.");
+  await reauthenticateWithCredential(u, EmailAuthProvider.credential(u.email, String(pw || "")));
+}
+
 // Create a Firebase login WITHOUT signing the current user out: it is done on a
 // temporary second app. `fn(uid, tdb)` runs while signed in as the new account
 // (tdb = the same database api, but acting as the new user).
@@ -123,6 +130,7 @@ export function dbError(e) {
   if (/permission|insufficient/i.test(code + m)) return "The database rules block this. Publish the latest firestore.rules (see README).";
   if (/unavailable|offline|network/i.test(code + m)) return "Cannot reach the database. Check the internet connection.";
   if (/too-many-requests/.test(code)) return "Too many tries. Please wait a few minutes.";
+  if (/wrong-password|invalid-credential/.test(code)) return "Wrong password.";
   if (/weak-password/.test(code)) return "The password is too weak (minimum 6 characters).";
   if (/email-already-in-use/.test(code)) return "This ID is already taken.";
   if (/network-request-failed/.test(code)) return "Network problem. Check the internet connection.";

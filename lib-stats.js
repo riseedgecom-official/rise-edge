@@ -94,19 +94,68 @@ export function feeFor(student, batch, month, { INST = {}, BF = {} } = {}) {
 }
 export const paidIn = (pays, sid, m) => n2(pays.filter((p) => p.sid === sid && p.m === m).reduce((a, p) => a + (+p.amt || 0), 0));
 
-// last 12 months (newest first), from the first month with any fee activity up to this month
-export function feeMonths(today, extra = []) {
-  const cur = today.slice(0, 7);
-  const ks = [...extra, cur].filter((m) => /^\d{4}-\d{2}$/.test(m || "")).sort();
-  const last = ks[ks.length - 1] > cur ? ks[ks.length - 1] : cur;
-  const out = [];
-  let y = +ks[0].slice(0, 4), m = +ks[0].slice(5, 7);
-  while (y + "-" + String(m).padStart(2, "0") <= last && out.length < 60) {
-    out.push(y + "-" + String(m).padStart(2, "0"));
-    if (++m > 12) { m = 1; y++; }
-  }
-  return out.reverse().slice(0, 12);
+// ---- month arithmetic on "YYYY-MM" strings (December -> January rolls the year) ----
+const MRE = /^\d{4}-\d{2}$/;
+export const isMonth = (m) => MRE.test(m || "");
+export function nextMonth(m, n = 1) {
+  const y = +m.slice(0, 4), mo = +m.slice(5, 7) - 1 + n;
+  const yy = y + Math.floor(mo / 12), mm = ((mo % 12) + 12) % 12;
+  return yy + "-" + String(mm + 1).padStart(2, "0");
 }
+// the month of a time stamp, in the device's local time
+export function monthOfTime(ms) {
+  if (!(+ms > 0)) return "";
+  const d = new Date(+ms);
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+}
+
+// ---- smart monthly fee ----
+// The fee of month M is DUE on the 1st day of month M+1. A student never owes a month before his first fee month
+// (= the month he registered). Nothing is stored for the automatic fees: they are worked out from the start month,
+// the amount rules (feeFor) and the payments, so they can never be created twice and a payment only touches its own month.
+// first fee month: the admin's own choice (fm) > the month the account was made (createdAt) > the month it was approved (ad)
+export function feeStart(u, pays = [], prs = []) {
+  if (isMonth(u.fm)) return u.fm;
+  const c = monthOfTime(u.createdAt) || monthOfTime(u.ad);
+  if (c) return c;
+  const own = [...pays, ...prs].filter((x) => x.sid === u.id && isMonth(x.m)).map((x) => x.m).sort();
+  return own[0] || "";   // unknown -> the plan starts this month, so nothing old is invented
+}
+// one month of one student. state: none (before he joined) | soon (not due yet) | unpaid | partial | paid
+export function monthStatus(u, batch, m, today, ctx, pays, start) {
+  const cur = today.slice(0, 7), paid = paidIn(pays, u.id, m);
+  const last = pays.filter((p) => p.sid === u.id && p.m === m).map((p) => p.d || "").sort().pop() || "";
+  if (start && m < start && paid <= 0) return { m, fee: 0, paid: 0, due: 0, state: "none", last: "", dueOn: nextMonth(m) + "-01" };
+  const fee = start && m < start ? paid : feeFor(u, batch, m, ctx);    // money taken before the first fee month is kept, but no fee is invented
+  const dueNow = m < cur, left = Math.max(0, n2(fee - paid));
+  const state = paid >= fee && (paid > 0 || fee === 0) ? "paid" : paid > 0 ? "partial" : dueNow ? "unpaid" : "soon";
+  return { m, fee, paid, due: dueNow ? left : 0, left, state, last, dueNow, dueOn: nextMonth(m) + "-01" };
+}
+// the whole picture of a student: rows newest first, what he owes, and what was already owed before the latest month
+export function feePlan(u, batch, today, ctx, pays = [], prs = []) {
+  const cur = today.slice(0, 7), start = feeStart(u, pays, prs) || cur, lastDue = nextMonth(cur, -1);
+  const all = [];
+  for (let m = start, i = 0; m <= lastDue && i < 120; m = nextMonth(m), i++) all.push(m);
+  // money or a pending request for this month / a later month: show that month too (paid in advance)
+  const early = new Set([...pays, ...prs].filter((x) => x.sid === u.id && isMonth(x.m) && x.m >= cur).map((x) => x.m));
+  [...early].sort().forEach((m) => all.push(m));
+  const rows = all.map((m) => {
+    const r = monthStatus(u, batch, m, today, ctx, pays, start);
+    return { ...r, pend: prs.find((x) => x.sid === u.id && x.m === m && x.st === "new"), rej: prs.filter((x) => x.sid === u.id && x.m === m && x.st === "no").sort((a, c) => c.t - a.t)[0], ok: r.state === "paid" };
+  }).reverse();
+  const owing = rows.filter((r) => r.due > 0);
+  const outstanding = n2(owing.reduce((a, r) => a + r.due, 0));
+  const prev = n2(owing.filter((r) => r.m !== lastDue).reduce((a, r) => a + r.due, 0));
+  return { rows, start, cur, lastDue, outstanding, prev, prevN: owing.filter((r) => r.m !== lastDue).length, owingN: owing.length, nextDue: start <= cur ? { m: cur, on: nextMonth(cur) + "-01" } : { m: start, on: nextMonth(start) + "-01" } };
+}
+
+// ---- extra fees the admin adds to one student (collection "sf"): {sid, amt, note, pays:[{a,d}]} ----
+export const manualPaid = (f) => n2((f.pays || []).reduce((a, p) => a + (+p.a || 0), 0));
+export function manualState(f) {
+  const paid = manualPaid(f), amt = +f.amt || 0;
+  return { paid, left: Math.max(0, n2(amt - paid)), state: paid >= amt && amt > 0 ? "paid" : paid > 0 ? "partial" : "unpaid" };
+}
+export const manualDue = (list) => n2((list || []).reduce((a, f) => a + manualState(f).left, 0));
 
 // ---------- roll ids ----------
 export const rollPrefix = (role, year) => "REA" + (role === "student" ? "S" : "T") + "-" + year + "-";

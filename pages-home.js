@@ -1,9 +1,9 @@
 // Dashboards: admin / co-admin, teacher, student, and the "waiting for approval" screen.
 import { db } from "./lib-db.js";
-import { S, esc, t, page, act, refresh, isTeacher, isStudent, canFees, T, f1, addBN, batchOf, fmtDate, ago } from "./lib-core.js";
+import { S, esc, t, page, act, refresh, isTeacher, isStudent, canFees, T, f1, addBN, batchOf, fmtDate, ago, monthLabel } from "./lib-core.js";
 import { icon, avatar, empty, notice, card, row, btn, ring, stat } from "./lib-ui.js";
 import { getStats, getNotices, active } from "./lib-svc.js";
-import { feeFor, paidIn } from "./lib-stats.js";
+import { feeFor, paidIn, feeStart, nextMonth } from "./lib-stats.js";
 
 // other page modules are optional: a broken one must not break the dashboard
 const lazy = async (mod, fn, ...a) => { try { const m = await import("./" + mod); return m[fn] ? await m[fn](...a) : ""; } catch (e) { console.warn(mod, e); return ""; } };
@@ -52,7 +52,7 @@ const noticeCard = async () => {
 
 // ---------- admin / co-admin ----------
 async function staffHome() {
-  const d = T(), m = d.slice(0, 7), A = S.U.filter(active), fees = canFees();
+  const d = T(), m = nextMonth(d.slice(0, 7), -1), A = S.U.filter(active), fees = canFees();   // m = the month whose fee fell due on the 1st of this month
   const [docs, P, BF, fp, rq, abs, ranks, pr, mk] = await Promise.all([
     Promise.all(S.B.map((b) => db.get("att/" + b.id + "_" + d).catch(() => null))),
     fees ? db.list("pay", ["m", "==", m]).catch(() => []) : [],
@@ -71,7 +71,7 @@ async function staffHome() {
   });
   const map = {};
   BF.forEach((x) => { map[x.bid + "_" + x.m] = x.amt; });
-  const billed = A.filter((s) => s.bid), due = billed.filter((s) => feeFor(s, batchOf(s.bid), m, { INST: S.INST, BF: map }) > paidIn(P, s.id, m)).length;
+  const billed = A.filter((s) => s.bid && (feeStart(s, P) || d.slice(0, 7)) <= m), due = billed.filter((s) => feeFor(s, batchOf(s.bid), m, { INST: S.INST, BF: map }) > paidIn(P, s.id, m)).length;
   const teachers = S.TC.filter(active).length;
   return `${welcome()}${pwNote()}${installCard()}
   <div class="card mt"><div class="rings">${ring(pres + ab ? (pres / (pres + ab)) * 100 : null, t("Attendance today"), "var(--ok)")}${fees ? ring(billed.length ? ((billed.length - due) / billed.length) * 100 : null, t("Fees paid"), "var(--blue)") : ""}</div></div>
@@ -79,7 +79,7 @@ async function staffHome() {
     stat({ ic: "users", label: t("Students"), value: A.length, color: "var(--blue)", ...nav("students") }),
     stat({ ic: "check", label: t("Present today"), value: pres, color: "var(--ok)", ...nav("attendance") }),
     stat({ ic: "x", label: t("Absent today"), value: ab, color: "var(--bad)", ...nav("attendance") }),
-    ...(fees ? [stat({ ic: "wallet", label: t("Fees due this month"), value: due, color: "var(--gold-ink)", ...nav("fees") })] : []),
+    ...(fees ? [stat({ ic: "wallet", label: t("Unpaid fees: {m}", { m: monthLabel(m) }), value: due, color: "var(--gold-ink)", ...nav("fees") })] : []),
     stat({ ic: "mega", label: t("Pending requests"), value: rq || 0, color: "#6a4cf0", ...nav("requests") }),
     stat({ ic: "cap", label: t("Teachers"), value: teachers, color: "#0a9aa8", ...nav("teachers") }),
   ])}</div>

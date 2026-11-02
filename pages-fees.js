@@ -5,14 +5,16 @@ import {
   S, esc, t, page, act, onInput, onChange, onSubmit, formData, pageState, refresh, go, canFees, isStudent, isTeacher, instName, T, fmtDate, ago, money, addBN,
   activeStudents, curBatch, n2, num, monthLabel, batchOf,
 } from "./lib-core.js";
-import { icon, avatar, tag, empty, notice, card, row, btn, chips, input, select, batchPicker, ask, askText, form, toast, showDoc, stat } from "./lib-ui.js";
-import { notify, saveInst, defaultFee, shrinkImage, logAct } from "./lib-svc.js";
-import { feeFor, paidIn, feeMonths } from "./lib-stats.js";
+import { icon, avatar, tag, empty, notice, card, row, btn, chips, input, select, batchPicker, ask, askText, form, toast, showDoc, stat, modal, closeModals } from "./lib-ui.js";
+import { notify, saveInst, defaultFee, shrinkImage } from "./lib-svc.js";
+import { feeFor, paidIn, feeStart, feePlan, monthStatus, nextMonth, manualState, manualDue } from "./lib-stats.js";
 
 const F = () => pageState("fe");
 const ctx = (BF) => ({ INST: S.INST, BF });
 const bfMap = (list) => { const o = {}; list.forEach((x) => { o[x.bid + "_" + x.m] = x.amt; }); return o; };
-const stateOf = (fee, paid, pend) => (paid >= fee ? ["ok", t("Paid")] : pend ? ["warn", t("Waiting for approval")] : paid > 0 ? ["warn", t("Partial")] : ["bad", t("Due")]);
+// one month: [css class, word]
+const WORD = { paid: ["ok", "Paid"], partial: ["warn", "Partial"], unpaid: ["bad", "Unpaid"], soon: ["", "Not due yet"], none: ["", "Not registered yet"] };
+const stateOf = (r) => (r.pend ? ["warn", t("Waiting for approval")] : [WORD[r.state][0], t(WORD[r.state][1])]);
 
 page("fees", async () => {
   if (isStudent()) return studentFees();
@@ -26,22 +28,29 @@ act("fe-tab", (el) => { F().tab = el.dataset.arg; refresh(); });
 // ---------- admin: student fees + payment requests ----------
 let BFADM = {};
 async function studentsTab() {
-  const st = F(); st.m = st.m || T().slice(0, 7);
+  const st = F(), cur = T().slice(0, 7);
+  st.m = st.m || nextMonth(cur, -1);   // the month whose fee became due on the 1st of this month
   const [R, P, bf] = await Promise.all([db.list("pr", ["st", "==", "new"]).catch(() => []), db.list("pay", ["m", "==", st.m]).catch(() => []), db.list("bf").catch(() => [])]);
   BFADM = bfMap(bf);
   const reqs = R.sort((a, b) => a.t - b.t);
   const L = S.bid ? activeStudents() : [];
+  const lines = L.map((s) => { const start = feeStart(s, P); return { s, unset: !start, r: monthStatus(s, curBatch(), st.m, T(), ctx(BFADM), P, start || cur) }; });
+  const billed = lines.filter((x) => x.r.state !== "none"), got = n2(billed.reduce((a, x) => a + x.r.paid, 0)), tot = n2(billed.reduce((a, x) => a + x.r.fee, 0));
+  const unpaid = billed.filter((x) => x.r.state === "unpaid" || x.r.state === "partial").length;
   return `${reqs.length ? card(t("Payment requests") + ` (${reqs.length})`, `<div class="stack">${reqs.map((r) => `<div class="card"><b>${esc(r.name)}</b> <span class="mut sm">${esc(t("Roll {r}", { r: r.roll }))}</span><div class="mut">${esc(monthLabel(r.m))} · ${esc(r.k === "online" ? t("Online") : t("Cash"))}${r.tx ? " · " + esc(r.tx) : ""} · ${ago(r.t)}</div>
       <div class="inline mt"><input type="number" step="any" min="1" id="pa-${esc(r.id)}" value="${r.amt}" inputmode="decimal">${r.hi ? btn(t("Screenshot"), "fe-shot", { arg: r.id, ic: "image" }) : ""}</div>
       <div class="row mt">${btn(t("Approve"), "fe-ok", { arg: r.id, kind: "pri", sm: true, ic: "check" })}${btn(t("Reject"), "fe-no", { arg: r.id, kind: "bad", sm: true, ic: "x" })}</div></div>`).join("")}</div>`) : ""}
   <div class="mt">${batchPicker()}</div>
-  ${input("m", { type: "month", value: st.m, "data-change": "fe-month", label: t("Month") })}
+  ${input("m", { type: "month", value: st.m, "data-change": "fe-month", label: t("Month"), hint: t("The fee of a month is due from the 1st day of the next month.") })}
   ${S.bid ? `<form class="card stack-s mt" data-submit="fe-pay"><h3>${esc(t("Student payment"))}</h3>${select("sid", L.map((s) => [s.id, s.name]), "", { label: t("Student") })}
     <div class="grid g2">${input("amt", { type: "number", step: "any", min: "1", label: t("Amount (৳)"), inputmode: "decimal" })}${select("method", [["Cash", t("Cash")], ["bKash", "bKash"], ["Nagad", "Nagad"], ["Rocket", "Rocket"], ["Bank", t("Bank")], ["Other", t("Other")]], "Cash", { label: t("Method") })}</div>
     ${input("tx", { label: t("Transaction ID (optional)") })}<button class="btn btn--pri" type="submit">${icon("check")}${esc(t("Add payment"))}</button></form>
-  <div class="card mt"><div class="card-h"><h3>${esc(monthLabel(st.m))}</h3></div><div class="list">${L.map((s) => {
-    const fee = feeFor(s, curBatch(), st.m, ctx(BFADM)), pd = paidIn(P, s.id, st.m), x = fee ? stateOf(fee, pd, false) : ["", t("No fee")];
-    return row({ av: avatar(s, 36), title: s.name, sub: `${money(pd)} / ${money(fee)}`, right: `${pd > 0 ? btn(t("Receipt"), "fe-rcpt", { arg: s.id, sm: true, ic: "doc" }) : ""}<b class="${x[0]}">${esc(x[1])}</b>` });
+  <div class="card mt"><div class="card-h"><h3>${esc(monthLabel(st.m))}</h3></div>
+    ${billed.length ? `<p class="mut sm">${esc(t("Collected {a} of {b}", { a: money(got), b: money(tot) }))}${unpaid ? ` · <b class="bad">${esc(t("{n} not fully paid", { n: unpaid }))}</b>` : ""}</p>` : ""}
+    <div class="list">${lines.map(({ s, r, unset }) => {
+    const x = r.state === "none" ? ["", unset ? t("Set first fee month") : t("Not registered yet")] : stateOf(r);
+    const sub = r.state === "none" ? (unset ? t("The first fee month is not known. Open the student and set it.") : t("No fee for this month")) : `${money(r.paid)} / ${money(r.fee)}${r.state === "soon" ? " · " + t("Due from {d}", { d: fmtDate(r.dueOn) }) : ""}`;
+    return row({ av: avatar(s, 36), title: s.name, sub, right: `${r.paid > 0 ? btn(t("Receipt"), "fe-rcpt", { arg: s.id, sm: true, ic: "doc" }) : ""}<b class="${x[0] || (unset ? "warn" : "mut")}">${esc(x[1])}</b>`, act: "open-user", arg: s.id });
   }).join("") || empty(t("No students."), "users")}</div></div>` : ""}`;
 }
 onChange("fe-month", (el) => { if (el.value) { F().m = el.value; refresh(); } });
@@ -151,27 +160,33 @@ onSubmit("fe-sal", async (el) => {
 act("fe-saldel", async (el) => { if (!(await ask(t("Delete this payment?"), { danger: true, ok: t("Delete") }))) return; await db.del("sal/" + el.dataset.arg); refresh(); });
 
 // ---------- student: my fees ----------
-let FP = { bf: [], pay: [], pr: [], map: {} };
+let FP = { bf: [], pay: [], pr: [], sf: [], map: {} };
 async function loadMine() {
-  const [bf, pay, pr] = await Promise.all([db.list("bf", ["bid", "==", S.me.bid]).catch(() => []), db.list("pay", ["sid", "==", S.pid]).catch(() => []), db.list("pr", ["sid", "==", S.pid]).catch(() => [])]);
-  FP = { bf, pay, pr, map: bfMap(bf) };
+  const [bf, pay, pr, sf] = await Promise.all([db.list("bf", ["bid", "==", S.me.bid]).catch(() => []), db.list("pay", ["sid", "==", S.pid]).catch(() => []), db.list("pr", ["sid", "==", S.pid]).catch(() => []), db.list("sf", ["sid", "==", S.pid]).catch(() => [])]);
+  FP = { bf, pay, pr, sf: sf.sort((a, b) => (b.t || 0) - (a.t || 0)), map: bfMap(bf) };
 }
-function months() {
-  const b = batchOf(S.me.bid) || {};
-  return feeMonths(T(), [...FP.pay.map((p) => p.m), ...FP.pr.map((r) => r.m), ...FP.bf.map((x) => x.m)]).map((m) => {
-    const fee = feeFor(S.me, b, m, ctx(FP.map)), paid = paidIn(FP.pay, S.pid, m), pend = FP.pr.find((r) => r.m === m && r.st === "new"), rej = FP.pr.filter((r) => r.m === m && r.st === "no").sort((a, c) => c.t - a.t)[0];
-    return { m, fee, paid, pend, rej, ok: paid >= fee, due: Math.max(0, n2(fee - paid)) };
-  });
-}
+const myPlan = () => feePlan({ ...S.me, id: S.pid }, batchOf(S.me.bid) || {}, T(), ctx(FP.map), FP.pay, FP.pr);
+const monthLine = (r) => {
+  if (r.state === "paid") return money(r.fee) + (r.last ? " · " + t("Paid on {d}", { d: fmtDate(r.last) }) : "");
+  if (r.state === "partial") return `${money(r.fee)} · ${t("Paid {a}", { a: money(r.paid) })} · ${t("Left {a}", { a: money(r.left) })}`;
+  return `${money(r.fee)} · ${t("Due from {d}", { d: fmtDate(r.dueOn) })}`;
+};
+const extraRows = (list) => list.map((f) => {
+  const m = manualState(f), s = WORD[m.state];
+  return `<div class="item fee-row ${m.state !== "paid" ? "fee-row--bad" : ""}"><div class="item-b"><b class="item-t">${esc(f.note)}</b><span class="mut">${money(f.amt)}${m.paid > 0 ? " · " + esc(t("Paid {a}", { a: money(m.paid) })) : ""}${m.left > 0 && m.paid > 0 ? " · " + esc(t("Left {a}", { a: money(m.left) })) : ""}${f.t ? " · " + esc(fmtDate(new Date(f.t).toISOString().slice(0, 10))) : ""}</span></div><div class="item-a"><b class="${s[0]}">${esc(t(s[1]))}</b></div></div>`;
+}).join("");
 async function studentFees() {
   if (!S.me.bid) return empty(t("You are not in a batch yet."), "layers");
   await loadMine();
-  const st = F(), L = months(), due = n2(L.filter((x) => !x.ok).reduce((a, x) => a + x.due, 0));
-  return `${card(t("My fees"), `<div class="grid g2"><div class="stat" style="--c:${due ? "var(--bad)" : "var(--ok)"}"><span class="stat-top">${icon("wallet")}${esc(t("Total due"))}</span><span class="stat-v">${money(due)}</span></div></div>
+  const st = F(), p = myPlan(), L = p.rows, mDue = manualDue(FP.sf), due = n2(p.outstanding + mDue);
+  return `${card(t("My fees"), `<div class="grid g2"><div class="stat" style="--c:${due ? "var(--bad)" : "var(--ok)"}"><span class="stat-top">${icon("wallet")}${esc(t("Outstanding balance"))}</span><span class="stat-v">${money(due)}</span></div>
+      ${p.prev > 0 ? `<div class="stat" style="--c:var(--bad)"><span class="stat-top">${icon("alert")}${esc(t("Previous unpaid"))}</span><span class="stat-v">${money(p.prev)}</span><span class="mut sm">${esc(t("{n} month(s)", { n: p.prevN }))}</span></div>` : ""}</div>
+    ${L.length ? "" : `<div class="mt">${notice(esc(t("No monthly fee is due yet. The fee of {m} will be due on {d}.", { m: monthLabel(p.nextDue.m), d: fmtDate(p.nextDue.on) })), "info")}</div>`}
     <div class="list mt">${L.map((x) => {
-      const s = stateOf(x.fee, x.paid, x.pend), go2 = !x.ok && !x.pend, open = st.m === x.m;
-      return `<div class="item ${go2 ? "item--click" : ""}" ${go2 ? `data-act="fe-sel" data-arg="${x.m}"` : ""}><div class="item-b"><b class="item-t">${esc(monthLabel(x.m))}</b><span class="mut">${money(x.paid)} / ${money(x.fee)}${x.rej && go2 ? " · " + esc(t("Rejected")) + (x.rej.rp ? ": " + esc(x.rej.rp) : "") : ""}</span>${open && go2 ? payPanel(x) : ""}</div><div class="item-a">${x.paid > 0 ? btn(t("Receipt"), "fe-mine", { arg: x.m, sm: true, ic: "doc" }) : ""}<b class="${s[0]}">${esc(s[1])}</b></div></div>`;
-    }).join("")}</div>`)}`;
+      const s = stateOf(x), go2 = x.due > 0 && !x.pend, open = st.m === x.m;
+      return `<div class="item fee-row ${x.due > 0 ? "fee-row--bad" : ""} ${go2 ? "item--click" : ""}" ${go2 ? `data-act="fe-sel" data-arg="${x.m}"` : ""}><div class="item-b"><b class="item-t">${esc(monthLabel(x.m))}</b><span class="mut">${esc(monthLine(x))}${x.rej && go2 ? " · " + esc(t("Rejected")) + (x.rej.rp ? ": " + esc(x.rej.rp) : "") : ""}</span>${open && go2 ? payPanel(x) : ""}</div><div class="item-a">${x.paid > 0 ? btn(t("Receipt"), "fe-mine", { arg: x.m, sm: true, ic: "doc" }) : ""}<b class="${s[0]}">${esc(s[1])}</b></div></div>`;
+    }).join("")}</div>`)}
+  ${FP.sf.length ? `<div class="mt">${card(t("Other fees"), `<div class="list">${extraRows(FP.sf)}</div><p class="mut sm mt">${esc(t("Pay these to the admin. They will update the status."))}</p>`)}</div>` : ""}`;
 }
 const payPanel = (x) => {
   const st = F(), k = st.k || "";
@@ -187,8 +202,8 @@ onInput("fe-tx", (el) => { F().tx = el.value; });
 onChange("fe-img", async (el) => { if (el.files[0]) { F().img = await shrinkImage(el.files[0]); refresh(); } });
 act("fe-send", async (el, e) => {
   e.stopPropagation();
-  const st = F(), x = months().find((y) => y.m === st.m);
-  if (!x || !(x.due > 0) || (st.k !== "cash" && st.k !== "online")) return;
+  const st = F(), x = myPlan().rows.find((y) => y.m === st.m);
+  if (!x || !(x.due > 0) || x.pend || (st.k !== "cash" && st.k !== "online")) return;
   if (st.k === "online" && !st.img) return toast(t("Upload the payment screenshot"), "bad");
   const id = await db.add("pr", { sid: S.pid, name: S.me.name, roll: S.me.roll, bid: S.me.bid, m: x.m, amt: x.due, k: st.k, tx: st.k === "online" ? (st.tx || "").trim().slice(0, 60) : "", st: "new", t: Date.now(), hi: st.k === "online" ? 1 : 0 });
   if (st.k === "online") await db.set("pi/" + id, { sid: S.pid, img: st.img });
@@ -197,14 +212,135 @@ act("fe-send", async (el, e) => {
 });
 act("fe-mine", (el, e) => { e.stopPropagation(); return receipt(S.me, el.dataset.arg); });
 
+// ---------- admin: one student's extra fees ("+ Add Fee") and payment history ----------
+// Extra fees live in their own collection (sf). They have no month, so they can never repeat or replace the automatic monthly fees.
+const studentOf = (id) => S.U.find((x) => x.id === id);
+const stuName = (id) => (studentOf(id) || {}).name || "";
+const statusSel = (v = "u") => select("st", [["u", t("Unpaid")], ["p", t("Partial")], ["a", t("Paid")]], v, { label: t("Status"), "data-change": "sf-st" });
+const payFields = () => `<div class="sf-p stack-s" hidden>${input("pa", { type: "number", step: "any", min: "0", label: t("Amount paid (৳)"), inputmode: "decimal" })}${input("d", { type: "date", value: T(), label: t("Payment date") })}</div>`;
+onChange("sf-st", (el) => { const f = el.closest("form"), box = f && f.querySelector(".sf-p"); if (!box) return; box.hidden = el.value === "u"; const pa = box.querySelector('[name="pa"]'); if (pa) pa.closest(".fld").hidden = el.value !== "p"; });
+const noteOf = (v) => String(v || "").trim().slice(0, 120);
+
+act("fee-add", async (el) => {
+  if (!canFees()) return;
+  const u = studentOf(el.dataset.arg);
+  if (!u) return toast(t("Not found"), "bad");
+  closeModals();
+  const done = await form(t("Add fee") + " · " + u.name, `${input("amt", { type: "number", step: "any", min: "1", label: t("Fee amount (৳)"), inputmode: "decimal" })}${input("note", { label: t("Note / description"), placeholder: t("Admission, exam fee, book…"), maxlength: "120" })}${statusSel("u")}${payFields()}`, {
+    ok: t("Save fee"), hint: t("For extra charges only. Monthly fees are added automatically."),
+    onSave: async (d) => {
+      const amt = num(d.amt), note = noteOf(d.note);
+      if (!(amt > 0)) throw new Error(t("Enter the amount"));
+      if (!note) throw new Error(t("Write a short note"));
+      const day = /^\d{4}-\d{2}-\d{2}$/.test(d.d || "") ? d.d : T();
+      let pays = [];
+      if (d.st === "a") pays = [{ a: amt, d: day, t: Date.now(), by: S.me.name }];
+      if (d.st === "p") {
+        const a = num(d.pa);
+        if (!(a > 0 && a < amt)) throw new Error(t("For Partial, the paid amount must be more than 0 and less than the fee."));
+        pays = [{ a, d: day, t: Date.now(), by: S.me.name }];
+      }
+      await db.add("sf", { sid: u.id, bid: u.bid || "", amt, note, pays, t: Date.now(), by: S.me.name });
+      notify(u.id, t("New fee added: ৳{a} ({n})", { a: amt, n: note }));
+      return true;
+    },
+  });
+  if (done) toast(t("Saved"), "ok");
+  await openHistory(u.id);
+});
+act("fee-edit", async (el) => {
+  if (!canFees()) return;
+  const f = await db.get("sf/" + el.dataset.arg);
+  if (!f) return toast(t("Not found"), "bad");
+  closeModals();
+  const paid = manualState(f).paid;
+  const done = await form(t("Edit fee") + " · " + stuName(f.sid), `${input("amt", { type: "number", step: "any", min: "1", value: f.amt, label: t("Fee amount (৳)"), inputmode: "decimal" })}${input("note", { label: t("Note / description"), value: f.note, maxlength: "120" })}`, {
+    onSave: async (d) => {
+      const amt = num(d.amt), note = noteOf(d.note);
+      if (!(amt > 0)) throw new Error(t("Enter the amount"));
+      if (!note) throw new Error(t("Write a short note"));
+      if (amt < paid) throw new Error(t("The fee cannot be less than the {a} already paid.", { a: money(paid) }));
+      await db.upd("sf/" + f.id, { amt, note, ut: Date.now(), ub: S.me.name });
+      return true;
+    },
+  });
+  if (done) toast(t("Saved"), "ok");
+  await openHistory(f.sid);
+});
+act("fee-pay", async (el) => {
+  if (!canFees()) return;
+  const f = await db.get("sf/" + el.dataset.arg);
+  if (!f) return toast(t("Not found"), "bad");
+  closeModals();
+  const m = manualState(f);
+  const done = await form(t("Record payment") + " · " + f.note, `<p class="mut">${esc(t("Fee {a}, left {b}", { a: money(f.amt), b: money(m.left) }))}</p>${input("a", { type: "number", step: "any", min: "1", value: m.left || "", label: t("Amount paid (৳)"), inputmode: "decimal" })}${input("d", { type: "date", value: T(), label: t("Payment date") })}`, {
+    onSave: async (d) => {
+      const a = num(d.a);
+      if (!(a > 0)) throw new Error(t("Enter the amount"));
+      if (a > m.left) throw new Error(t("That is more than the {a} left.", { a: money(m.left) }));
+      const day = /^\d{4}-\d{2}-\d{2}$/.test(d.d || "") ? d.d : T();
+      await db.upd("sf/" + f.id, { pays: [...(f.pays || []), { a, d: day, t: Date.now(), by: S.me.name }] });
+      notify(f.sid, t("Payment received: ৳{a} ({m})", { a, m: f.note }));
+      return true;
+    },
+  });
+  if (done) toast(t("Saved"), "ok");
+  await openHistory(f.sid);
+});
+act("fee-pdel", async (el) => {
+  if (!canFees()) return;
+  const [id, i] = String(el.dataset.arg).split("|"), f = await db.get("sf/" + id);
+  if (!f || !(f.pays || [])[+i]) return toast(t("Not found"), "bad");
+  if (!(await ask(t("Remove this payment of {a}?", { a: money(f.pays[+i].a) }), { danger: true, ok: t("Remove") }))) return;
+  await db.upd("sf/" + id, { pays: f.pays.filter((_, k) => k !== +i) });
+  await openHistory(f.sid);
+});
+act("fee-del", async (el) => {
+  if (!canFees()) return;
+  const f = await db.get("sf/" + el.dataset.arg);
+  if (!f) return toast(t("Not found"), "bad");
+  if (!(await ask(t("Delete the fee “{n}” of {a}? Its payments are removed too.", { n: f.note, a: money(f.amt) }), { danger: true, ok: t("Delete") }))) return;
+  await db.del("sf/" + f.id);
+  toast(t("Deleted"), "ok");
+  await openHistory(f.sid);
+});
+act("fee-hist", (el) => openHistory(el.dataset.arg));
+
+async function openHistory(sid) {
+  const u = studentOf(sid);
+  if (!u || !canFees()) return;
+  const [pays, sf, bf, prs] = await Promise.all([db.list("pay", ["sid", "==", sid]).catch(() => []), db.list("sf", ["sid", "==", sid]).catch(() => []), db.list("bf", ["bid", "==", u.bid || "_"]).catch(() => []), db.list("pr", ["sid", "==", sid]).catch(() => [])]);
+  const extra = sf.sort((a, b) => (b.t || 0) - (a.t || 0)), p = feePlan(u, batchOf(u.bid) || {}, T(), ctx(bfMap(bf)), pays, prs), mDue = manualDue(extra), due = n2(p.outstanding + mDue);
+  const events = [...pays.map((x) => ({ d: x.d || "", t: x.t || 0, what: monthLabel(x.m), via: x.method || "", a: +x.amt || 0 })), ...extra.flatMap((f) => (f.pays || []).map((x) => ({ d: x.d || "", t: x.t || 0, what: f.note, via: "", a: +x.a || 0 })))].sort((a, b) => (b.d > a.d ? 1 : b.d < a.d ? -1 : (b.t || 0) - (a.t || 0)));
+  closeModals();
+  modal(`<div class="row-nw">${avatar(u, 48)}<div class="sp"><h3 style="margin:0">${esc(u.name)}</h3><span class="mut">${esc(u.roll || "")}</span></div></div>
+    <div class="grid g2 mt"><div class="stat" style="--c:${due ? "var(--bad)" : "var(--ok)"}"><span class="stat-top">${icon("wallet")}${esc(t("Outstanding balance"))}</span><span class="stat-v">${money(due)}</span></div>
+      <div class="stat" style="--c:var(--blue)"><span class="stat-top">${icon("clock")}${esc(t("First fee month"))}</span><span class="stat-v" style="font-size:16px">${p.start && feeStart(u, pays, prs) ? esc(monthLabel(p.start)) : esc(t("Not set"))}</span></div></div>
+    <div class="row mt">${btn(t("+ Add Fee"), "fee-add", { arg: sid, kind: "pri", sm: true })}</div>
+    <h4 class="mt">${esc(t("Other fees"))}</h4>
+    ${extra.length ? `<div class="stack-s">${extra.map((f) => {
+      const m = manualState(f), s = WORD[m.state];
+      return `<div class="card fee-row ${m.state !== "paid" ? "fee-row--bad" : ""}"><div class="row" style="justify-content:space-between;gap:8px"><b>${esc(f.note)}</b><b class="${s[0]}">${esc(t(s[1]))}</b></div>
+        <div class="mut sm">${money(f.amt)} · ${esc(t("Paid {a}", { a: money(m.paid) }))} · ${esc(t("Left {a}", { a: money(m.left) }))}${f.t ? " · " + esc(fmtDate(new Date(f.t).toISOString().slice(0, 10))) : ""}${f.by ? " · " + esc(f.by) : ""}</div>
+        ${(f.pays || []).map((x, i) => `<div class="row sm" style="gap:6px"><span class="mut">${esc(fmtDate(x.d))}</span><b>${money(x.a)}</b>${btn(t("Remove"), "fee-pdel", { arg: f.id + "|" + i, xs: true, kind: "bad" })}</div>`).join("")}
+        <div class="row mt">${m.left > 0 ? btn(t("Record payment"), "fee-pay", { arg: f.id, sm: true, kind: "pri", ic: "check" }) : ""}${btn(t("Edit"), "fee-edit", { arg: f.id, sm: true, ic: "edit" })}${btn(t("Delete"), "fee-del", { arg: f.id, sm: true, kind: "bad", ic: "trash" })}</div></div>`;
+    }).join("")}</div>` : `<p class="mut sm">${esc(t("No extra fee yet."))}</p>`}
+    <h4 class="mt">${esc(t("Monthly fees"))}</h4>
+    ${p.rows.length ? `<div class="list">${p.rows.slice(0, 24).map((r) => { const s = stateOf(r); return `<div class="item fee-row ${r.due > 0 ? "fee-row--bad" : ""}"><div class="item-b"><b class="item-t">${esc(monthLabel(r.m))}</b><span class="mut">${esc(monthLine(r))}</span></div><div class="item-a"><b class="${s[0]}">${esc(s[1])}</b></div></div>`; }).join("")}</div>` : `<p class="mut sm">${esc(t("No monthly fee is due yet. The fee of {m} will be due on {d}.", { m: monthLabel(p.nextDue.m), d: fmtDate(p.nextDue.on) }))}</p>`}
+    <h4 class="mt">${esc(t("Payment history"))}</h4>
+    ${events.length ? `<div class="list">${events.slice(0, 60).map((e) => `<div class="item"><div class="item-b"><b>${esc(e.what)}</b><span class="mut">${esc(fmtDate(e.d) || "–")}${e.via ? " · " + esc(e.via) : ""}</span></div><div class="item-a"><b class="ok">${money(e.a)}</b></div></div>`).join("")}</div>` : `<p class="mut sm">${esc(t("No payment yet."))}</p>`}
+    <div class="mod-f"><button class="btn" data-act="pu-close">${esc(t("Close"))}</button></div>`);
+}
+
 // ---------- dashboard cards ----------
 export async function feeSummaryCard() {
   if (!isStudent() || !S.me.bid) return "";
   try {
     await loadMine();
-    const L = months(), due = n2(L.filter((x) => !x.ok).reduce((a, x) => a + x.due, 0));
-    return `<button class="card card--click" data-act="nav" data-arg="fees" style="text-align:left;width:100%;font:inherit;color:inherit"><div class="card-h"><h3>${esc(t("Fees"))}</h3><b class="${due ? "bad" : "ok"}">${due ? t("Due") + " " + money(due) : t("All paid")}</b></div>
-      ${L.slice(0, 3).map((x) => { const s = stateOf(x.fee, x.paid, x.pend); return `<div class="row" style="justify-content:space-between;padding:3px 0"><span>${esc(monthLabel(x.m))}</span><b class="${s[0]}">${esc(s[1])}</b></div>`; }).join("")}</button>`;
+    const p = myPlan(), mDue = manualDue(FP.sf), due = n2(p.outstanding + mDue);
+    return `<button class="card card--click" data-act="nav" data-arg="fees" style="text-align:left;width:100%;font:inherit;color:inherit"><div class="card-h"><h3>${esc(t("Fees"))}</h3><b class="${due ? "bad" : "ok"}">${due ? t("Due") + " " + money(due) : p.rows.length || FP.sf.length ? t("All paid") : t("Nothing due yet")}</b></div>
+      ${p.rows.length ? p.rows.slice(0, 3).map((x) => { const s = stateOf(x); return `<div class="row" style="justify-content:space-between;padding:3px 0"><span>${esc(monthLabel(x.m))}</span><b class="${s[0]}">${esc(s[1])}</b></div>`; }).join("") : `<p class="mut sm" style="margin:0">${esc(t("The fee of {m} will be due on {d}.", { m: monthLabel(p.nextDue.m), d: fmtDate(p.nextDue.on) }))}</p>`}
+      ${mDue > 0 ? `<div class="row" style="justify-content:space-between;padding:3px 0"><span>${esc(t("Other fees"))}</span><b class="bad">${money(mDue)}</b></div>` : ""}</button>`;
   } catch (e) { return ""; }
 }
 export async function payRequestsCard() {
@@ -237,4 +373,20 @@ addBN({
   "Teacher": "শিক্ষক", "Payment done": "পেমেন্ট সম্পন্ন", "Teacher payment status": "শিক্ষকদের পেমেন্টের অবস্থা", "Not paid": "পরিশোধ হয়নি", "Delete": "মুছুন", "No teacher yet.": "এখনো কোনো শিক্ষক নেই।", "Payment received: ৳{a} for {m}": "পেমেন্ট গৃহীত: ৳{a}, {m} এর জন্য", "Delete this payment?": "এই পেমেন্ট মুছবেন?",
   "You are not in a batch yet.": "আপনি এখনো কোনো ব্যাচে নেই।", "My fees": "আমার ফি", "Total due": "মোট বাকি", "Rejected": "বাতিল হয়েছে", "How did you pay?": "কীভাবে পরিশোধ করেছেন?", "The admin will check and approve it.": "অ্যাডমিন যাচাই করে অনুমোদন দেবেন।", "Send for approval": "অনুমোদনের জন্য পাঠান", "Back": "ফিরে যান",
   "Transaction ID": "ট্রানজেকশন আইডি", "Payment screenshot": "পেমেন্টের স্ক্রিনশট", "Upload the payment screenshot": "পেমেন্টের স্ক্রিনশট দিন", "Sent. The admin will check and approve it.": "পাঠানো হয়েছে। অ্যাডমিন যাচাই করে অনুমোদন দেবেন।", "Fees": "ফি", "All paid": "সব পরিশোধিত", "Salary": "বেতন", "Not paid yet": "এখনো পরিশোধিত নয়",
+});
+
+addBN({
+  "Unpaid": "অপরিশোধিত", "Not due yet": "এখনো দেয় হয়নি", "Not registered yet": "এখনো ভর্তি হয়নি", "The fee of a month is due from the 1st day of the next month.": "কোনো মাসের ফি পরের মাসের ১ তারিখ থেকে বকেয়া হয়।",
+  "Collected {a} of {b}": "{b} এর মধ্যে {a} আদায়", "{n} not fully paid": "{n} জন পুরো দেননি", "Set first fee month": "প্রথম ফি-র মাস ঠিক করুন", "The first fee month is not known. Open the student and set it.": "প্রথম ফি-র মাস জানা নেই। ছাত্রকে খুলে ঠিক করে দিন।",
+  "No fee for this month": "এই মাসে কোনো ফি নেই", "Due from {d}": "{d} থেকে বকেয়া", "Paid on {d}": "{d} তারিখে পরিশোধ", "Paid {a}": "পরিশোধ {a}", "Left {a}": "বাকি {a}",
+  "Outstanding balance": "মোট বকেয়া", "Previous unpaid": "আগের বকেয়া", "{n} month(s)": "{n} মাস", "No monthly fee is due yet. The fee of {m} will be due on {d}.": "এখনো কোনো মাসিক ফি বকেয়া নেই। {m} মাসের ফি {d} থেকে বকেয়া হবে।",
+  "Other fees": "অন্যান্য ফি", "Pay these to the admin. They will update the status.": "এগুলো অ্যাডমিনকে দিন। তিনি অবস্থা হালনাগাদ করবেন।", "The fee of {m} will be due on {d}.": "{m} মাসের ফি {d} থেকে বকেয়া হবে।", "Nothing due yet": "এখনো কিছু বকেয়া নেই",
+  "Status": "অবস্থা", "Amount paid (৳)": "পরিশোধিত পরিমাণ (৳)", "Payment date": "পরিশোধের তারিখ", "Fee amount (৳)": "ফি-র পরিমাণ (৳)", "Note / description": "নোট / বিবরণ", "Admission, exam fee, book…": "ভর্তি, পরীক্ষার ফি, বই…",
+  "Save fee": "ফি সংরক্ষণ", "For extra charges only. Monthly fees are added automatically.": "শুধু অতিরিক্ত ফি-র জন্য। মাসিক ফি নিজে থেকেই যোগ হয়।", "Write a short note": "সংক্ষেপে একটি নোট লিখুন",
+  "For Partial, the paid amount must be more than 0 and less than the fee.": "আংশিক হলে পরিশোধিত পরিমাণ ০ এর বেশি ও ফি-র কম হতে হবে।", "New fee added: ৳{a} ({n})": "নতুন ফি যোগ হয়েছে: ৳{a} ({n})",
+  "Edit fee": "ফি সম্পাদনা", "The fee cannot be less than the {a} already paid.": "ফি, আগে পরিশোধ করা {a} এর কম হতে পারবে না।", "Record payment": "পেমেন্ট লিখুন", "Fee {a}, left {b}": "ফি {a}, বাকি {b}", "That is more than the {a} left.": "এটি বাকি {a} এর চেয়ে বেশি।",
+  "Remove this payment of {a}?": "{a} এর এই পেমেন্ট সরাবেন?", "Delete the fee “{n}” of {a}? Its payments are removed too.": "“{n}” ফি ({a}) মুছবেন? এর পেমেন্টগুলোও মুছে যাবে।",
+  "First fee month": "প্রথম ফি-র মাস", "Not set": "ঠিক করা নেই", "+ Add Fee": "+ ফি যোগ করুন", "Monthly fees": "মাসিক ফি", "Payment history": "পেমেন্টের ইতিহাস", "No extra fee yet.": "এখনো কোনো অতিরিক্ত ফি নেই।", "No payment yet.": "এখনো কোনো পেমেন্ট নেই।",
+  "Fee history": "ফি-র ইতিহাস", "Unpaid fees: {m}": "{m} এর বাকি ফি", "Leave empty to use the month the student registered. No fee is made for earlier months.": "খালি রাখলে ছাত্র যে মাসে রেজিস্ট্রেশন করেছে সেটি ধরা হবে। আগের মাসের কোনো ফি তৈরি হয় না।",
+  "Not found": "পাওয়া যায়নি", "Deleted": "মুছে ফেলা হয়েছে",
 });

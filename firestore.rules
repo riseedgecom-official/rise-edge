@@ -2,6 +2,7 @@ rules_version = '2';
 // Rise Edge Academy - Firestore rules.
 // Roles: admin (everything) | co-admin = a teacher profile with ca:true (everything except fees, salary and a few admin-only fields)
 //        teacher (only the batches in users/<id>.bids) | student (only his own batch and his own records).
+// Admin transfer: only the admin can change a profile's role (co-admins cannot touch the admin's profile), so the role can only move through the admin.
 // Every get()/exists() in a rule is one billed read, so the helper functions below are kept short.
 service cloud.firestore {
   match /databases/{d}/documents {
@@ -26,14 +27,16 @@ service cloud.firestore {
     function selfTch(u) { return selfCommon(u) && u.role == 'teacher' && u.keys().hasOnly(['role', 'name', 'nick', 'roll', 'subject', 'phone', 'addr', 'email', 'bids', 'cls', 'active', 'mustChange', 'ap']) && u.ap == false && u.roll is string && u.roll.matches('REAT-[0-9]{4}-[0-9]{3,6}') && u.bids is list && u.bids.size() == 0 && ss(u, 'subject') && ss(u, 'cls'); }
 
     // ---------- admin: everything. co-admin: everything except these ----------
+    // (config and map have their own rules below; sf = extra fees, xfer = admin transfer history: admin only)
     match /{c}/{id} {
-      allow read, write: if adm() || (cadm() && c != 'users' && c != 'log' && c != 'batches' && !(c in ['pay', 'pr', 'pi', 'bf', 'sal']));
+      allow read, write: if adm() || (cadm() && c != 'users' && c != 'log' && c != 'batches' && c != 'config' && c != 'map' && !(c in ['pay', 'pr', 'pi', 'bf', 'sal', 'sf', 'xfer']));
     }
 
     // ---------- settings ----------
     match /config/{id} {
       allow read: if id != 'mail' || request.auth != null;
       allow create: if request.auth != null && fresh();   // first-time setup only
+      allow write: if cadm() && id == 'reg';              // co-admin: only the "registration open" switch (never config/init, which makes fresh() false)
     }
     match /cn/{id} {   // roll number counters
       allow read: if true;
@@ -44,7 +47,12 @@ service cloud.firestore {
       allow read: if true;
       allow create: if request.auth != null && regOpen() && request.auth.token.email == id + '@rise.local' && request.resource.data.keys().hasOnly(['es']) && request.resource.data.es == [request.auth.token.email];
     }
-    match /map/{id} { allow read: if request.auth != null && request.auth.uid == id; }
+    // After a password reset a new login points at the old profile. A co-admin may do that, but never for the admin's profile or login.
+    function notAdminProfile(p) { return !exists(/databases/$(d)/documents/users/$(p)) || get(/databases/$(d)/documents/users/$(p)).data.role != 'admin'; }
+    match /map/{id} {
+      allow read: if request.auth != null && request.auth.uid == id;
+      allow create, update: if cadm() && request.resource.data.keys().hasOnly(['sid']) && request.resource.data.sid is string && notAdminProfile(id) && (request.resource.data.sid == '_' || notAdminProfile(request.resource.data.sid));
+    }
     match /fp/{id} {   // "forgot password" request from the sign-in page
       allow create: if request.resource.data.st == 'new' && request.resource.data.keys().hasOnly(['roll', 'name', 'phone', 'st', 't']) && request.resource.data.roll is string && request.resource.data.roll.size() < 30 && request.resource.data.name is string && request.resource.data.name.size() < 100 && request.resource.data.phone is string && request.resource.data.phone.size() < 30;
     }
@@ -55,9 +63,9 @@ service cloud.firestore {
     // ---------- people ----------
     match /users/{id} {
       allow read: if cadm();
-      allow create: if cadm() && request.resource.data.role in ['student', 'teacher'] && request.resource.data.get('ca', false) == false && request.resource.data.get('fo', 0) == 0;
+      allow create: if cadm() && request.resource.data.role in ['student', 'teacher'] && request.resource.data.get('ca', false) == false && request.resource.data.get('fo', 0) == 0 && !('fm' in request.resource.data);
       allow delete: if cadm() && resource.data.role in ['student', 'teacher'] && resource.data.get('ca', false) == false;
-      allow update: if cadm() && resource.data.role != 'admin' && request.resource.data.role == resource.data.role && request.resource.data.get('ca', false) == resource.data.get('ca', false) && request.resource.data.get('fo', 0) == resource.data.get('fo', 0);
+      allow update: if cadm() && resource.data.role != 'admin' && request.resource.data.role == resource.data.role && request.resource.data.get('ca', false) == resource.data.get('ca', false) && request.resource.data.get('fo', 0) == resource.data.get('fo', 0) && request.resource.data.get('fm', '') == resource.data.get('fm', '') && request.resource.data.get('createdAt', 0) == resource.data.get('createdAt', 0);
       allow read: if request.auth != null && sid() == id;
       allow read: if tch(resource.data.bid);
       allow create: if request.auth != null && sid() == id && fresh() && request.resource.data.role == 'admin';   // first admin
@@ -164,6 +172,7 @@ service cloud.firestore {
     // ---------- money (admin only; the student sees his own) ----------
     match /pay/{id} { allow read: if request.auth != null && resource.data.sid == sid() && apd(); }
     match /bf/{id} { allow read: if request.auth != null && resource.data.bid == myb(); }
+    match /sf/{id} { allow read: if request.auth != null && resource.data.sid == sid() && apd(); }   // extra fees the admin added to this student
     match /sal/{id} { allow read: if request.auth != null && resource.data.tid == sid() && apd(); }
     match /pr/{id} {
       allow read: if request.auth != null && resource.data.sid == sid() && apd();

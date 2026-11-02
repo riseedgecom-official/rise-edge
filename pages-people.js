@@ -1,19 +1,23 @@
 // People: students, teachers, registrations / approvals, batches, co-admin panel, and the profile popup.
 import { db } from "./lib-db.js";
 import {
-  S, esc, t, page, act, onInput, onSubmit, pageState, refresh, isAdmin, isStaff, instName, cmp, lk, ago, fmtDate, T, money,
-  smsHref, waHref, copyText, addBN, batchOf,
+  S, esc, t, page, act, onInput, onChange, onSubmit, pageState, refresh, isAdmin, isStaff, instName, cmp, lk, ago, fmtDate, T, money, monthLabel,
+  smsHref, waHref, copyText, addBN, batchOf, uniq,
 } from "./lib-core.js";
 import {
   icon, avatar, tag, empty, notice, card, row, btn, chips, input, select, field, clsOptions, grpOptions, grpLabel,
   modal, ask, form, toast, closeModals,
 } from "./lib-ui.js";
 import { createAccount, resetPassword, removeUser, reloadPeople, recalcBatch, sendMail, logAct, monthStart } from "./lib-svc.js";
-import { findBatch } from "./lib-stats.js";
+import { findBatch, subjectsFor, feeStart, isMonth } from "./lib-stats.js";
 
 const MAX_CO = 5;
 const findUser = (id) => [...S.U, ...S.TC, ...S.PEND].find((u) => u.id === id);
-const batchLabel = (u) => (u.role === "teacher" ? (u.bids || []).map((b) => (batchOf(b) || {}).name).filter(Boolean).join(", ") : (batchOf(u.bid) || {}).name || "");
+const batchLabel = (u) => (u.role === "teacher"
+  ? (u.bids || []).map((b) => { const n = (batchOf(b) || {}).name, sj = (u.sj || {})[b]; return n ? (sj && sj.length ? n + " (" + sj.join(", ") + ")" : n) : ""; }).filter(Boolean).join("; ")
+  : (batchOf(u.bid) || {}).name || "");
+// one box per teacher: photo, name, small roll under the name. Co-admins are gold.
+const tcard = (x, right = "", act = "open-user") => `<div class="tcard ${x.ca ? "tcard--co" : ""}" data-act="${act}" data-arg="${esc(x.id)}">${avatar(x, 44)}<div class="tcard-b"><b>${esc(x.name)}</b><span class="mut">${esc(x.roll || "")}</span></div><div class="tcard-t">${right}</div></div>`;
 const clsLabel = (u) => (u.cls ? t("Class {n}", { n: u.cls }) + (u.grp ? " · " + t(u.grp) : "") : "");
 const reload = async (...bids) => { await reloadPeople(); for (const b of [...new Set(bids.filter(Boolean))]) await recalcBatch(b).catch(() => {}); refresh(); };
 
@@ -104,12 +108,12 @@ act("open-user", (el) => {
   const B = (label, a, o = {}) => btn(label, a, { arg: u.id, sm: true, ...o });
   modal(`<div class="row-nw">${avatar(u, 56)}<div class="sp"><h3 style="margin:0">${esc(u.name)}</h3><span class="mut">${esc(u.roll || "")}</span><div class="row" style="gap:4px;margin-top:4px">
       ${st ? tag(t("Student")) : tag(t("Teacher"))}${pend ? tag(t("Waiting for approval"), "warn") : ""}${u.active === false ? tag(t("Inactive"), "bad") : ""}${co ? tag(t("Co-admin"), "gold") : ""}${u.pub ? tag(t("Can publish"), "ok") : ""}</div></div></div>
-    <div class="list mt">${kv(t("Nickname"), u.nick)}${kv(t("Class"), clsLabel(u))}${kv(t("Batch"), bn)}${kv(t("School / college"), u.school)}${kv(t("Subject"), u.subject)}${kv(t("Phone"), u.phone)}${kv(t("Guardian name"), u.gname)}${kv(t("Guardian's phone"), u.gphone)}${kv(t("Guardian's email"), u.gem)}${kv(t("Blood group"), u.bg)}${kv(t("Address"), u.addr)}${kv(t("Email"), u.email)}${st && isAdmin() && +u.fo > 0 ? kv(t("Personal monthly fee"), money(u.fo)) : ""}</div>
+    <div class="list mt">${kv(t("Nickname"), u.nick)}${kv(t("Class"), clsLabel(u))}${kv(st ? t("Batch") : t("Batches"), bn)}${kv(t("School / college"), u.school)}${kv(t("Subject"), u.subject)}${kv(t("Phone"), u.phone)}${kv(t("Guardian name"), u.gname)}${kv(t("Guardian's phone"), u.gphone)}${kv(t("Guardian's email"), u.gem)}${kv(t("Blood group"), u.bg)}${kv(t("Address"), u.addr)}${kv(t("Email"), u.email)}${st && isAdmin() && +u.fo > 0 ? kv(t("Personal monthly fee"), money(u.fo)) : ""}${st && isAdmin() ? kv(t("First fee month"), feeStart(u) ? monthLabel(feeStart(u)) : t("Not set")) : ""}</div>
     <div class="row mt">
       ${pend ? B(t("Approve"), "ap-yes", { kind: "pri", ic: "check" }) + B(t("Reject"), "ap-no", { kind: "bad", ic: "x" }) : ""}
       ${B(t("Edit"), "pu-edit", { ic: "edit" })}${B(t("ID card"), "pu-id", { ic: "idcard" })}
       ${st ? B(t("Move batch"), "pu-move", { ic: "layers" }) : B(t("Batches"), "tch-bids", { ic: "layers" })}
-      ${st && isAdmin() ? B(t("Personal fee"), "pu-fee", { ic: "wallet" }) : ""}
+      ${st && isAdmin() ? B(t("+ Add Fee"), "fee-add", { kind: "pri" }) + B(t("Fee history"), "fee-hist", { ic: "clock" }) + B(t("Personal fee"), "pu-fee", { ic: "wallet" }) : ""}
       ${!st && isAdmin() ? B(co ? t("Remove co-admin") : t("Make co-admin"), "tch-co", { ic: "shield" }) + B(u.pub ? t("Stop publish rights") : t("Allow publishing"), "tch-pub", { ic: "eye" }) : ""}
       ${!pend ? B(t("New password"), "pu-pw", { ic: "key" }) + B(u.active === false ? t("Reactivate") : t("Deactivate"), "pu-act", { ic: "lock" }) : ""}
       ${B(t("Delete"), "pu-del", { kind: "bad", ic: "trash" })}
@@ -147,8 +151,10 @@ act("pu-move", async (el) => {
 act("pu-fee", async (el) => {
   const u = target(el);
   closeModals();
-  await form(t("Personal monthly fee"), input("fo", { label: t("Amount (৳). Leave 0 to use the batch / default fee."), type: "number", value: u.fo || 0, min: "0", step: "any", inputmode: "decimal" }), {
-    onSave: async (d) => { await db.upd("users/" + u.id, { fo: Math.max(0, +d.fo || 0) }); await reload(); },
+  await form(t("Personal monthly fee"), input("fo", { label: t("Amount (৳). Leave 0 to use the batch / default fee."), type: "number", value: u.fo || 0, min: "0", step: "any", inputmode: "decimal" })
+    + input("fm", { label: t("First fee month"), type: "month", value: isMonth(u.fm) ? u.fm : "", hint: t("Leave empty to use the month the student registered. No fee is made for earlier months.") }), {
+    validate: (d) => (d.fm && !isMonth(d.fm) ? t("Choose the month") : ""),
+    onSave: async (d) => { await db.upd("users/" + u.id, { fo: Math.max(0, +d.fo || 0), fm: d.fm || "" }); await reload(); },
   });
 });
 act("pu-id", async (el) => {
@@ -189,7 +195,7 @@ page("teachers", () => {
   const L = S.TC.filter((x) => !f || (x.bids || []).includes(f)).sort((a, b) => cmp(a.name, b.name));
   return `<div class="inline mb"><div class="sp"></div>${btn(t("Add teacher"), "tch-add", { kind: "pri", ic: "plus" })}</div>
     ${chips([{ k: "", label: t("All") }, ...S.B.map((b) => ({ k: b.id, label: b.name }))], f, "tch-f")}
-    <div class="card">${L.length ? `<div class="list">${L.map((x) => row({ av: avatar(x), title: x.name, sub: esc([x.roll, x.subject, batchLabel(x)].filter(Boolean).join(" · ")), right: `${x.ca ? tag(t("Co-admin"), "gold") : ""}${x.pub ? tag(t("Can publish"), "ok") : ""}${x.active === false ? tag(t("Inactive"), "bad") : ""}`, act: "open-user", arg: x.id })).join("")}</div>` : empty(t("No teachers yet."), "cap")}</div>`;
+    ${L.length ? `<div class="stack-s">${L.map((x) => tcard(x, `${x.ca ? tag(t("Co-admin"), "gold") : ""}${x.pub ? tag(t("Can publish"), "ok") : ""}${x.active === false ? tag(t("Inactive"), "bad") : ""}`)).join("")}</div>` : `<div class="card">${empty(t("No teachers yet."), "cap")}</div>`}`;
 }, { title: "Teachers" });
 act("tch-f", (el) => { pageState("tch").b = el.dataset.arg; refresh(); });
 act("tch-add", async () => {
@@ -206,16 +212,32 @@ act("tch-add", async () => {
 act("tch-bids", async (el) => {
   const u = target(el);
   closeModals();
-  const boxes = S.B.map((b) => `<label class="check"><input type="checkbox" name="b_${esc(b.id)}" ${(u.bids || []).includes(b.id) ? "checked" : ""}><span>${esc(b.name)}</span></label>`).join("");
-  await form(t("Batches of {n}", { n: u.name }), `<div style="max-height:50vh;overflow:auto">${boxes || esc(t("Add a batch first."))}</div>`, {
+  const SDs = Object.fromEntries((await db.list("sd").catch(() => [])).map((d) => [d.id, d]));
+  const sj = u.sj || {}, names = {};
+  const boxes = S.B.map((b) => {
+    const on = (u.bids || []).includes(b.id), cur = sj[b.id] || [], base = subjectsFor(b.cls, b.grp, SDs[b.id]).map((x) => x.s);
+    const all = names[b.id] = uniq([...base, ...cur]);
+    return `<div class="tb"><label class="check"><input type="checkbox" name="b_${esc(b.id)}" data-change="tb-on" ${on ? "checked" : ""}><span><b>${esc(b.name)}</b></span></label>
+      <div class="tb-s" ${on ? "" : "hidden"}><p class="mut sm">${esc(t("Tick the subjects this teacher takes in this batch. None ticked = all subjects."))}</p>
+        ${all.map((n, i) => `<label class="check"><input type="checkbox" name="s_${esc(b.id)}_${i}" ${cur.includes(n) ? "checked" : ""}><span>${esc(n)}</span></label>`).join("")}
+        <input name="o_${esc(b.id)}" placeholder="${esc(t("Other subject names, separated by commas"))}"></div></div>`;
+  }).join("");
+  await form(t("Batches of {n}", { n: u.name }), `<p class="mut sm">${esc(t("The teacher can enter marks and update the syllabus only for the ticked subjects."))}</p><div style="max-height:55vh;overflow:auto">${boxes || esc(t("Add a batch first."))}</div>`, {
     onSave: async (d) => {
-      const bids = S.B.filter((b) => d["b_" + b.id]).map((b) => b.id);
-      await db.upd("users/" + u.id, { bids });
+      const bids = S.B.filter((b) => d["b_" + b.id]).map((b) => b.id), nsj = {};
+      for (const b of bids) {
+        const pick = (names[b] || []).filter((n, i) => d["s_" + b + "_" + i]);
+        const other = String(d["o_" + b] || "").split(",").map((x) => x.trim()).filter(Boolean);
+        const all = uniq([...pick, ...other]);
+        if (all.length) nsj[b] = all;
+      }
+      await db.upd("users/" + u.id, { bids, sj: nsj });
       logAct("Batches of " + u.name);
       await reload();
     },
   });
 });
+onChange("tb-on", (el) => { const b = el.closest(".tb"), x = b && b.querySelector(".tb-s"); if (x) x.hidden = !el.checked; });
 act("tch-pub", async (el) => { const u = target(el); await db.upd("users/" + u.id, { pub: !u.pub }); closeModals(); await reload(); });
 act("tch-co", async (el) => {
   const u = target(el), on = !u.ca;
@@ -228,7 +250,7 @@ act("tch-co", async (el) => {
 
 // ---------- registrations / approvals ----------
 async function approve(u) {
-  const p = { ap: true };
+  const p = { ap: true, ad: Date.now() };
   if (u.role === "student" && !u.bid) { const b = findBatch(S.B, u.cls, u.grp); if (b) p.bid = b.id; }
   await db.upd("users/" + u.id, p);
   if (u.email) sendMail(u.email, u.name, t("Registration approved"), t("Your registration at {n} is approved. Login ID: {id}. You can use everything now.", { n: instName(), id: u.roll })).catch(() => {});
@@ -320,7 +342,7 @@ act("bat-del", async (el) => {
 page("coadmin", async () => {
   const cos = S.TC.filter((x) => x.ca), others = S.TC.filter((x) => !x.ca && x.active !== false);
   const log = (await db.recent("log", 100).catch(() => [])).sort((a, b) => b.t - a.t);
-  return `${card(t("Co-admins") + ` (${cos.length}/${MAX_CO})`, `${cos.length ? `<div class="list">${cos.map((x) => row({ av: avatar(x), title: x.name, sub: esc([x.roll, x.phone].filter(Boolean).join(" · ")), right: btn(t("Remove"), "tch-co", { arg: x.id, sm: true, kind: "bad" }), act: "open-user", arg: x.id })).join("")}</div>` : empty(t("No co-admin yet."), "shield")}
+  return `${card(t("Co-admins") + ` (${cos.length}/${MAX_CO})`, `${cos.length ? `<div class="stack-s">${cos.map((x) => tcard(x, btn(t("Remove"), "tch-co", { arg: x.id, sm: true, kind: "bad" }))).join("")}</div>` : empty(t("No co-admin yet."), "shield")}
       ${cos.length < MAX_CO && others.length ? `<div class="inline mt">${select("who", [["", t("Choose a teacher")], ...others.map((x) => [x.id, x.name])], "", { id: "ca-who" })}${btn(t("Make co-admin"), "ca-make", { kind: "pri" })}</div>` : ""}
       <p class="mut sm mt">${esc(t("Co-admins manage students, batches, attendance, exams and results. They never see fees or salary."))}</p>`)}
     <div class="mt">${card(t("Activity log"), log.length ? `<div class="list">${log.map((l) => row({ title: l.msg, sub: esc(l.by + " · " + ago(l.t)) })).join("")}</div>` : empty(t("No activity yet."), "list"))}</div>`;
@@ -334,6 +356,8 @@ act("ca-make", async () => {
 });
 
 addBN({
+  "Tick the subjects this teacher takes in this batch. None ticked = all subjects.": "এই ব্যাচে শিক্ষক যে বিষয়গুলো নেন সেগুলোতে টিক দিন। কিছু না দিলে সব বিষয়।", "Other subject names, separated by commas": "অন্য বিষয়ের নাম, কমা দিয়ে লিখুন",
+  "The teacher can enter marks and update the syllabus only for the ticked subjects.": "শিক্ষক শুধু টিক দেওয়া বিষয়ের নম্বর তুলতে ও সিলেবাস আপডেট করতে পারবেন।",
   "Registration open": "রেজিস্ট্রেশন চালু", "Registration closed": "রেজিস্ট্রেশন বন্ধ",
   "{inst}: login ID {roll}, password {pw}. Please change the password after you sign in.": "{inst}: লগইন আইডি {roll}, পাসওয়ার্ড {pw}। সাইন ইনের পর পাসওয়ার্ড বদলে নিন।",
   "Login ID": "লগইন আইডি", "Copy": "কপি", "Copied": "কপি হয়েছে", "Could not copy": "কপি করা গেল না", "Email sent": "ইমেইল পাঠানো হয়েছে", "Your login details": "আপনার লগইন তথ্য",

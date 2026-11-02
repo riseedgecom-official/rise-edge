@@ -1,7 +1,7 @@
 // Data services: loading the app's data, accounts, notifications, files, mail.
 // Pages call these instead of touching the database directly for anything shared.
 import { db, withNewAccount, isEmailInUse, authEmail } from "./lib-db.js";
-import { S, T, lk, cmp, num, sleep } from "./lib-core.js";
+import { S, T, t, lk, cmp, num, sleep } from "./lib-core.js";
 import { calcBatch, statRow, rollOf, rollPrefix, counterKey, defaultBatches, findBatch, DEFAULT_FEE } from "./lib-stats.js";
 
 export const active = (u) => u.active !== false && u.ap !== false;
@@ -196,6 +196,42 @@ export async function resetPassword(u) {
   ]);
   u.cu = uid; u.mustChange = true;
   return pw;
+}
+
+// ---------- admin transfer ----------
+// The main admin hands the admin role to a teacher. ONE atomic batch: the teacher becomes admin, the old admin becomes a
+// co-admin (so access is never lost) and a history entry is written. Nothing changes unless all of it is saved.
+export async function transferAdmin(toId) {
+  const me = S.me;
+  if (!me || me.role !== "admin" || me.co) throw new Error(t("Only the main admin can transfer admin access."));
+  if (!toId || toId === S.pid) throw new Error(t("Choose another person."));
+  const [to, from] = await Promise.all([db.get("users/" + toId), db.get("users/" + S.pid)]);   // fresh copies, not the cached lists
+  if (!from || from.role !== "admin") throw new Error(t("You are not the admin any more. Reload the page."));
+  if (!to || to.role !== "teacher") throw new Error(t("Only a teacher can become the admin."));
+  if (to.active === false || to.ap === false) throw new Error(t("This account is not active."));
+  if (to.mustChange === true) throw new Error(t("This teacher has not signed in and set a password yet."));
+  const now = Date.now(), ops = [];
+  const back = { role: "teacher", ca: true, active: true, ap: true, mustChange: false, bids: Array.isArray(from.bids) ? from.bids : [], pa: now };   // previous admin = co-admin
+  if (!from.roll) {   // a teacher-style login ID, so the old admin can be listed, given a new password, and so on
+    const year = new Date().getFullYear(), q = await nextSerial("teacher", year);
+    for (let i = 0; i < 30; i++) {
+      const n = q.n + i, roll = rollOf("teacher", year, n), key = roll.toLowerCase();
+      if (await db.get("login/" + key)) continue;
+      back.roll = roll;
+      ops.push({ set: ["login/" + key, { es: [from.email || authEmail(roll)] }] }, { set: ["cn/" + q.key, { n }] });
+      break;
+    }
+  }
+  ops.push(
+    { upd: ["users/" + toId, { role: "admin", ca: false, ta: now }] },
+    { upd: ["users/" + S.pid, back] },
+    { set: ["xfer/" + timeId(), { from: S.pid, fromName: from.name || "", fromEmail: from.email || "", to: toId, toName: to.name || "", toRoll: to.roll || "", wasCo: to.ca === true, t: now, d: T() }] },
+    { set: ["nt/" + timeId(), { to: toId, t: t("You are now the admin of {n}. Reload the app to see the admin menu.", { n: (S.INST && S.INST.name) || "Rise Edge Academy" }), d: now }] },
+  );
+  await db.batch(ops);
+  const [a, b] = await Promise.all([db.get("users/" + toId), db.get("users/" + S.pid)]);   // make sure somebody is admin
+  if (!a || a.role !== "admin" || !b || b.role !== "teacher" || b.ca !== true) throw new Error(t("The transfer could not be confirmed. Open the Admin transfer page and check the history."));
+  return { toName: to.name || "", wasCo: to.ca === true };
 }
 
 export async function removeUser(u) {

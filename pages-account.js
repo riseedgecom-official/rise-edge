@@ -17,30 +17,55 @@ const clsText = (u) => {
   const b = batchOf(u.bid) || {}, c = u.cls || b.cls, g = u.grp || b.grp;
   return c ? t("Class {n}", { n: c }) + (g ? " · " + t(g) : "") : "–";
 };
+// The card background is an SVG drawn inside the card (not a CSS background), so the gradients and shapes also print when the
+// browser's "background graphics" option is off. Colours come from the logo: deep navy, electric blue, gold.
+let bgN = 0;
+function idBg(back) {
+  const k = "idb" + ++bgN, yl = back ? 168 : 204, yr = back ? 138 : 168, fl = back ? 500 : 490, fr = back ? 488 : 478;
+  const dots = []; for (let x = 232; x <= 320; x += 14) for (let y = 22; y <= 64; y += 14) dots.push(`<circle cx="${x}" cy="${y}" r="1.5"/>`);
+  const hex = (cx, cy, r) => [0, 1, 2, 3, 4, 5].map((i) => (cx + r * Math.cos(Math.PI / 3 * i + Math.PI / 6)).toFixed(1) + "," + (cy + r * Math.sin(Math.PI / 3 * i + Math.PI / 6)).toFixed(1)).join(" ");
+  return `<svg class="idc-bg" viewBox="0 0 340 540" preserveAspectRatio="none" aria-hidden="true"><defs>
+    <linearGradient id="${k}h" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="340" y2="${yl}"><stop offset="0" stop-color="#050b1f"/><stop offset=".55" stop-color="#0a2a6b"/><stop offset="1" stop-color="#1469e8"/></linearGradient>
+    <linearGradient id="${k}g" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="340" y2="0"><stop offset="0" stop-color="#b9790a"/><stop offset=".5" stop-color="#f2b01e"/><stop offset="1" stop-color="#ffd36b"/></linearGradient>
+    <linearGradient id="${k}p" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="540"><stop offset="0" stop-color="#ffffff"/><stop offset=".6" stop-color="#f1f6ff"/><stop offset="1" stop-color="#dfeaff"/></linearGradient>
+    <linearGradient id="${k}f" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="340" y2="0"><stop offset="0" stop-color="#050b1f"/><stop offset="1" stop-color="#0d3c9c"/></linearGradient></defs>
+    <rect width="340" height="540" fill="url(#${k}p)"/>
+    <g fill="none" stroke="#1469e8" stroke-opacity=".08" stroke-width="1.6"><polygon points="${hex(296, 300, 46)}"/><polygon points="${hex(318, 352, 30)}"/><polygon points="${hex(40, back ? 330 : 470, 38)}"/></g>
+    <circle cx="14" cy="${back ? 300 : 440}" r="72" fill="#f2b01e" fill-opacity=".08"/><polygon points="340,${back ? 200 : 236} 340,${back ? 300 : 340} 250,${back ? 300 : 340}" fill="#1469e8" fill-opacity=".05"/>
+    <path d="M0 0H340V${yr}L0 ${yl}Z" fill="url(#${k}h)"/>
+    <circle cx="310" cy="14" r="76" fill="#fff" fill-opacity=".06"/><circle cx="310" cy="14" r="50" fill="none" stroke="#ffd36b" stroke-opacity=".4" stroke-width="1.4"/><polygon points="0,0 96,0 0,96" fill="#2f86ff" fill-opacity=".28"/>
+    <polygon points="${hex(36, back ? 120 : 160, 22)}" fill="none" stroke="#ffd36b" stroke-opacity=".45" stroke-width="1.4"/><g fill="#fff" fill-opacity=".35">${dots.join("")}</g>
+    <path d="M0 ${yl}L340 ${yr}V${yr + 7}L0 ${yl + 7}Z" fill="url(#${k}g)"/><path d="M0 ${yl + 12}L340 ${yr + 12}" stroke="#2f86ff" stroke-opacity=".55" stroke-width="1.5"/>
+    <path d="M0 540V${fl}L340 ${fr}V540Z" fill="url(#${k}f)"/><path d="M0 ${fl}L340 ${fr}" stroke="url(#${k}g)" stroke-width="3"/>
+    <rect x="10" y="10" width="320" height="520" rx="14" fill="none" stroke="#2f86ff" stroke-width="2.5"/><rect x="15.5" y="15.5" width="309" height="509" rx="10" fill="none" stroke="#f2b01e" stroke-opacity=".75" stroke-width="1"/>
+    <g fill="none" stroke="#f2b01e" stroke-width="5" stroke-linecap="round"><path d="M10 44V24a14 14 0 0 1 14-14H44"/><path d="M296 10h20a14 14 0 0 1 14 14v20"/><path d="M10 496v20a14 14 0 0 0 14 14h20"/><path d="M330 496v20a14 14 0 0 1-14 14h-20"/></g></svg>`;
+}
 function frontHtml(u) {
   const st = u.role === "student", b = batchOf(u.bid) || {};
   const rows = st
     ? [[t("Name"), u.name], [t("Roll"), u.roll], [t("Class"), clsText(u)], [t("Batch"), b.name || "–"], [t("Guardian Name"), u.gname || "–"], [t("Guardian Phone"), u.gphone || "–"]]
     : [[t("Name"), u.name], [t("ID"), u.roll], [t("Subject"), u.subject || "–"], [t("Phone"), u.phone || "–"], [t("Blood group"), u.bg || "–"]];
   const yr = (String(u.roll || "").match(/-(\d{4})-/) || [])[1] || "";
-  return `<div class="idc"><div class="idc-frame"><i></i><i></i><i></i><i></i></div><div class="idc-in">
+  return `<div class="idc">${idBg(false)}<div class="idc-in">
     <img class="idc-logo" src="logo.jpg" alt="">
     <div class="idc-name">${esc(instName().toUpperCase())}</div>
     <div class="idc-tag">${esc(S.INST.tag || t("Student, teacher and admin portal"))}</div>
     <div class="idc-role">${esc(st ? t("STUDENT ID CARD") : t("TEACHER ID CARD"))}</div>
     <div class="idc-main"><div class="idc-l"><div class="idc-photo">${u.pic ? `<img src="${esc(u.pic)}" alt="">` : esc([...(u.name || "?")][0])}</div><div class="idc-qr">${qrSvg(u.roll || u.id, { margin: 0 })}</div></div>
-      <div class="idc-r">${rows.map(([l, v]) => `<div class="idc-f"><small>${esc(l)}</small><b>${esc(v)}</b></div>`).join("")}</div></div>
+      <div class="idc-r">${rows.map(([l, v]) => `<div class="idc-f${String(v).length > 34 ? " idc-f--xs" : String(v).length > 22 ? " idc-f--s" : ""}"><small>${esc(l)}</small><b>${esc(v)}</b></div>`).join("")}</div></div>
     <div class="idc-foot"><span>${esc(S.INST.phone || "")}</span><span>${esc(yr ? t("Session") + " " + yr : "")}</span></div></div></div>`;
 }
 function backHtml(u) {
-  return `<div class="idc idc--back"><div class="idc-frame"><i></i><i></i><i></i><i></i></div><div class="idc-in">
-    <img class="idc-logo" src="logo.jpg" alt="" style="align-self:center">
-    <div class="idc-name" style="align-self:center">${esc(instName().toUpperCase())}</div>
+  return `<div class="idc idc--back">${idBg(true)}<div class="idc-in">
+    <img class="idc-logo" src="logo.jpg" alt="">
+    <div class="idc-name">${esc(instName().toUpperCase())}</div>
+    <div class="idc-bk">
     <p>${esc(t("This card is the property of {n}. It must be shown when asked.", { n: instName() }))}</p>
     <p>${esc(t("If found, please return it to the academy."))}</p>
     ${S.INST.addr ? `<p><b>${esc(S.INST.addr)}</b></p>` : ""}${S.INST.phone ? `<p><b>${esc(t("Phone"))}: ${esc(S.INST.phone)}</b></p>` : ""}
     ${u.bg ? `<p>${esc(t("Blood group"))}: <b>${esc(u.bg)}</b></p>` : ""}
-    <div style="margin-top:28px;align-self:center;border-top:1px solid #0a1636;padding-top:4px;font-size:11px;min-width:150px">${esc(S.INST.owner || t("Authorized signature"))}</div></div></div>`;
+    <div class="idc-sign">${esc(S.INST.owner || t("Authorized signature"))}</div></div>
+    <div class="idc-foot"><span></span><span>${esc(S.INST.tag || "")}</span></div></div></div>`;
 }
 const sheet = (list, backs = true) => `<div class="idc-sheet">${list.map((u) => frontHtml(u) + (backs ? backHtml(u) : "")).join("")}</div>`;
 export function showIdCard(u) { showDoc(sheet([u]), { title: u.name }); }
