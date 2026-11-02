@@ -64,6 +64,14 @@ export const S = {
 };
 export const isStaff = () => !!S.me && (S.me.role === "admin" || S.me.co);
 export const isAdmin = () => !!S.me && S.me.role === "admin" && !S.me.co;
+// A plain teacher can be limited to some subjects of a batch (users/<id>.sj = {batchId: [subject, ...]}).
+// null = not limited (admin, co-admin, or no subject ticked for that batch).
+export const mySubjects = (bid) => {
+  const m = S.me, a = m && m.role === "teacher" && !m.co && m.sj && m.sj[bid];
+  return Array.isArray(a) && a.length ? a : null;
+};
+const sjKey = (x) => String(x == null ? "" : x).trim().toLowerCase();
+export const subjectOk = (bid, name) => { const a = mySubjects(bid); return !a || a.some((x) => sjKey(x) === sjKey(name)); };
 export const isTeacher = () => !!S.me && S.me.role === "teacher" && !S.me.co; // a plain teacher (not a co-admin)
 export const canPublish = () => isStaff() || (isTeacher() && S.me.pub === true); // may publish exam results / reports
 export const canFees = () => isAdmin();

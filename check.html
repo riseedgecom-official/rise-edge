@@ -46,7 +46,9 @@ add("ok", "এই ঠিকানা", location.origin + location.pathname);
 const A = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js");
 const AU = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js");
 const FS = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
-const app = A.initializeApp(cfg);
+// a separate, named app: it never uses the sign-in of the admin who may be logged in to the app in this same browser,
+// so the rules test below really asks "can a person who is NOT signed in read the data?"
+const app = A.initializeApp(cfg, "check-anon");
 
 // 1. Authentication
 const a = add("go", "লগইন সিস্টেম (Authentication) দেখা হচ্ছে…");
