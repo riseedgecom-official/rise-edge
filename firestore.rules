@@ -103,20 +103,20 @@ service cloud.firestore {
       allow create: if tch(request.resource.data.bid);
       allow update: if tch(resource.data.bid) && tch(request.resource.data.bid);
     }
-    // ---------- performance: marks of one assessment (quiz, class test ...) of a batch ----------
-    // pa = the assessment with ALL marks (staff only). pf = what ONE student may read: his own mark of a PUBLISHED assessment.
+    // ---------- performance: Class Performance and Exam Performance of a batch (out of 10) ----------
+    // pa = a Class Performance or Exam Performance record (out of 10) with ALL marks of the batch (staff only). pf = what ONE student may read: his own mark of a PUBLISHED assessment.
     // A teacher changes only the assessments he made himself; admin / co-admin everything (rule at the top).
-    function perfOk(x) { return x.title is string && x.title.size() > 0 && x.title.size() < 120 && x.max is number && x.max > 0 && x.max <= 100000 && x.date is string && x.date.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}') && x.by is string && ss(x, 'subj') && ss(x, 'tn'); }
+    function perfOk(x) { return x.ty in ['c', 'e'] && x.max == 10 && x.date is string && x.date.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}') && x.by is string && ss(x, 'title') && ss(x, 'tn'); }
     match /pa/{id} {
       allow read: if tch(resource.data.bid);
-      allow create: if tch(request.resource.data.bid) && request.resource.data.by == sid() && perfOk(request.resource.data) && request.resource.data.pub is bool && request.resource.data.m is map && request.resource.data.keys().hasOnly(['bid', 'title', 'subj', 'max', 'date', 'by', 'tn', 'pub', 'm', 't', 'pt']);
-      allow update: if tch(resource.data.bid) && resource.data.by == sid() && request.resource.data.bid == resource.data.bid && request.resource.data.by == resource.data.by && perfOk(request.resource.data) && request.resource.data.pub is bool && request.resource.data.m is map && request.resource.data.keys().hasOnly(['bid', 'title', 'subj', 'max', 'date', 'by', 'tn', 'pub', 'm', 't', 'pt']);
+      allow create: if tch(request.resource.data.bid) && request.resource.data.by == sid() && perfOk(request.resource.data) && request.resource.data.pub is bool && request.resource.data.m is map && request.resource.data.keys().hasOnly(['bid', 'ty', 'title', 'max', 'date', 'by', 'tn', 'pub', 'm', 't']);
+      allow update: if tch(resource.data.bid) && resource.data.by == sid() && request.resource.data.bid == resource.data.bid && request.resource.data.by == resource.data.by && perfOk(request.resource.data) && request.resource.data.pub is bool && request.resource.data.m is map && request.resource.data.keys().hasOnly(['bid', 'ty', 'title', 'max', 'date', 'by', 'tn', 'pub', 'm', 't']);
       allow delete: if tch(resource.data.bid) && resource.data.by == sid();
     }
     match /pf/{id} {
       allow read: if request.auth != null && resource.data.sid == sid() && apd();
       allow read: if tch(resource.data.bid);
-      allow create, update: if tch(request.resource.data.bid) && request.resource.data.by == sid() && perfOk(request.resource.data) && request.resource.data.m is number && request.resource.data.m >= 0 && request.resource.data.m <= request.resource.data.max && request.resource.data.sid is string && get(/databases/$(d)/documents/users/$(request.resource.data.sid)).data.get('bid', '') == request.resource.data.bid && request.resource.data.keys().hasOnly(['aid', 'sid', 'sn', 'bid', 'title', 'subj', 'max', 'm', 'date', 'by', 'tn', 't']);
+      allow create, update: if tch(request.resource.data.bid) && request.resource.data.by == sid() && perfOk(request.resource.data) && request.resource.data.m is number && request.resource.data.m >= 0 && request.resource.data.m <= request.resource.data.max && request.resource.data.sid is string && get(/databases/$(d)/documents/users/$(request.resource.data.sid)).data.get('bid', '') == request.resource.data.bid && request.resource.data.keys().hasOnly(['aid', 'sid', 'sn', 'bid', 'ty', 'title', 'max', 'm', 'date', 'by', 'tn', 't']);
       allow delete: if tch(resource.data.bid) && resource.data.by == sid();
     }
     match /rt/{id} { allow read: if request.auth != null && (tch(id) || myb() == id); }   // class routine, written by admin / co-admin
