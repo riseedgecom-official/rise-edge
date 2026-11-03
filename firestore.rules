@@ -106,6 +106,7 @@ service cloud.firestore {
     // ---------- performance: Class Performance and Exam Performance of a batch (out of 10) ----------
     // pa = a Class Performance or Exam Performance record (out of 10) with ALL marks of the batch (staff only). pf = what ONE student may read: his own mark of a PUBLISHED assessment.
     // A teacher changes only the assessments he made himself; admin / co-admin everything (rule at the top).
+    // No get() per student here on purpose: a batched write may make only 20 document reads in all, so one lookup per student would stop a teacher from publishing a class of more than ~17.
     function perfOk(x) { return x.ty in ['c', 'e'] && x.max == 10 && x.date is string && x.date.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}') && x.by is string && ss(x, 'title') && ss(x, 'tn'); }
     match /pa/{id} {
       allow read: if tch(resource.data.bid);
@@ -116,7 +117,7 @@ service cloud.firestore {
     match /pf/{id} {
       allow read: if request.auth != null && resource.data.sid == sid() && apd();
       allow read: if tch(resource.data.bid);
-      allow create, update: if tch(request.resource.data.bid) && request.resource.data.by == sid() && perfOk(request.resource.data) && request.resource.data.m is number && request.resource.data.m >= 0 && request.resource.data.m <= request.resource.data.max && request.resource.data.sid is string && get(/databases/$(d)/documents/users/$(request.resource.data.sid)).data.get('bid', '') == request.resource.data.bid && request.resource.data.keys().hasOnly(['aid', 'sid', 'sn', 'bid', 'ty', 'title', 'max', 'm', 'date', 'by', 'tn', 't']);
+      allow create, update: if tch(request.resource.data.bid) && request.resource.data.by == sid() && perfOk(request.resource.data) && request.resource.data.m is number && request.resource.data.m >= 0 && request.resource.data.m <= request.resource.data.max && request.resource.data.sid is string && request.resource.data.keys().hasOnly(['aid', 'sid', 'sn', 'bid', 'ty', 'title', 'max', 'm', 'date', 'by', 'tn', 't']);
       allow delete: if tch(resource.data.bid) && resource.data.by == sid();
     }
     match /rt/{id} { allow read: if request.auth != null && (tch(id) || myb() == id); }   // class routine, written by admin / co-admin
