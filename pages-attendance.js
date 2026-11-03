@@ -1,4 +1,4 @@
-// Attendance, homework, class routine and guardian results (SMS / WhatsApp / email to guardians).
+// Attendance, class routine, today's absent students and guardian results (SMS / WhatsApp / email to guardians).
 import { db } from "./lib-db.js";
 import {
   S, esc, t, page, act, onInput, onChange, onSubmit, formData, pageState, refresh, isStaff, isAdmin, isStudent, instName, T, fmtDate,
@@ -6,7 +6,7 @@ import {
 } from "./lib-core.js";
 import { icon, avatar, tag, empty, notice, card, row, btn, chips, input, select, textarea, batchPicker, ring, ask, form, toast, modal } from "./lib-ui.js";
 import { counted } from "./lib-stats.js";
-import { batchData, dropBatchCache, recalcBatch, getStats, notify, logAct, sendMail, downloadFile, delFile } from "./lib-svc.js";
+import { recalcBatch, getStats, notify, logAct, sendMail } from "./lib-svc.js";
 
 const noBatch = () => empty(S.me && S.me.role === "student" ? t("You are not in a batch yet.") : t("Add a batch first."), "layers");
 const gwho = (s) => t("Guardian of {n}", { n: s.name });
@@ -88,70 +88,39 @@ async function studentAttendance() {
     <p class="mut sm mt">${esc(t("Counted from {d}.", { d: fmtDate((b || {}).start) }))}</p>`)}`;
 }
 
-// today's absent students for the staff dashboard
-export async function absentToday() {
+// ---------- today's absent students (staff dashboard, bottom) ----------
+// "Today" is Bangladesh time. docs = today's attendance document of each batch (same order as S.B) when the caller already read them.
+const AB = () => pageState("ab");
+const clsOf = (s) => (s.cls ? t("Class {n}", { n: s.cls }) + (s.grp ? " · " + t(s.grp) : "") : "");
+function absentRows() {
+  const d = T(), L = ABS.docs || [], out = [];
+  L.forEach((x, i) => {
+    if (!x) return;
+    const b = S.B[i];
+    (x.A || []).forEach((id) => { const s = S.U.find((u) => u.id === id); if (s && s.active !== false) out.push({ s, b }); });
+  });
+  return { d, out, taken: L.filter(Boolean).length };
+}
+let ABS = { docs: [] };
+function absentBox() {
+  const { d, out, taken } = absentRows(), st = AB();
+  const by = {};
+  out.forEach((r) => { (by[r.b.id] = by[r.b.id] || { b: r.b, L: [] }).L.push(r); });
+  const groups = S.B.filter((b) => by[b.id]).map((b) => by[b.id]);
+  const f = by[st.b] ? st.b : "", show = f ? groups.filter((g) => g.b.id === f) : groups;
+  const head = `<div class="card-h"><h3>${esc(t("Today's Absent Students"))}</h3><span class="row" style="gap:6px">${tag(fmtDate(d), "info")}${tag(String(out.length), out.length ? "bad" : "ok")}</span></div>`;
+  const foot = `<p class="mut sm mt">${esc(t("Attendance taken for {a} of {b} batches today.", { a: taken, b: S.B.length }))}</p>`;
+  if (!out.length) return `<section class="card ab" id="ab-box">${head}${empty(taken ? t("No absent students today.") : t("Attendance has not been taken yet today."), taken ? "check" : "calendar")}${foot}</section>`;
+  const filt = groups.length > 1 ? `<div class="mb">${chips([{ k: "", label: t("All") + " (" + out.length + ")" }, ...groups.map((g) => ({ k: g.b.id, label: g.b.name + " (" + g.L.length + ")" }))], f, "ab-f")}</div>` : "";
+  return `<section class="card ab" id="ab-box">${head}${filt}${show.map((g) => `<div class="ab-g"><b>${esc(g.b.name)}</b><span>${g.L.length}</span></div><div class="list">${g.L.map(({ s }) => `<div class="item ab-r">${avatar(s, 40)}<div class="item-b"><button type="button" class="ab-name" data-act="open-user" data-arg="${esc(s.id)}">${esc(s.nick || s.name)}</button><span class="mut sm">${esc([s.nick ? s.name : "", s.roll].filter(Boolean).join(" · "))}</span><span class="mut sm">${esc([g.b.name, clsOf(s)].filter(Boolean).join(" · "))}</span></div><div class="item-a">${tag(t("Absent"), "bad")}</div></div>`).join("")}</div>`).join("")}${foot}</section>`;
+}
+act("ab-f", (el) => { AB().b = el.dataset.arg; const box = document.getElementById("ab-box"); if (box) box.outerHTML = absentBox(); });
+export async function absentToday(docs) {
   if (!S.me || S.me.role === "student" || !S.B.length) return "";
   const d = T();
-  const docs = await Promise.all(S.B.map((b) => db.get("att/" + b.id + "_" + d).catch(() => null)));
-  const ab = [];
-  docs.forEach((x) => { if (x) (x.A || []).forEach((id) => { const s = S.U.find((u) => u.id === id); if (s) ab.push(s); }); });
-  if (!ab.length) return "";
-  return card(t("Absent today") + ` (${ab.length})`, `<div class="list">${absRows(ab, d)}</div>`);
+  ABS = { docs: docs || (await Promise.all(S.B.map((b) => db.get("att/" + b.id + "_" + d).catch(() => null)))) };
+  return absentBox();
 }
-
-// ---------- homework ----------
-const H = () => pageState("hw");
-page("homework", async () => {
-  if (!S.bid) return noBatch();
-  const L = (isStudent() ? await db.list("hw", ["bid", "==", S.bid]) : (await batchData(S.bid)).hw).slice().sort((a, b) => (b.date > a.date ? 1 : b.date < a.date ? -1 : 0));
-  if (isStudent()) {
-    return L.length ? `<div class="card"><div class="list">${L.map((h) => { const dn = (h.D || []).includes(S.pid); return row({ title: h.title, sub: fmtDate(h.date), right: `${h.fid ? btn(t("File"), "hw-file", { arg: h.fid, sm: true, ic: "download" }) : ""}${tag(dn ? t("Done") : t("Not done"), dn ? "ok" : "bad")}` }); }).join("")}</div></div>` : empty(t("No homework yet."), "book");
-  }
-  const st = H(), cur = L.find((h) => h.id === st.id);
-  const stu = activeStudents();
-  if (cur && st.hid !== cur.id) { st.hid = cur.id; st.D = [...(cur.D || [])]; }
-  return `${batchPicker()}
-  <form class="card stack-s" data-submit="hw-add"><h3>${esc(t("New homework"))}</h3>${input("title", { placeholder: t("Homework"), label: t("Homework") })}${input("date", { type: "date", value: T(), label: t("Date") })}<button class="btn btn--pri" type="submit">${icon("plus")}${esc(t("Add homework"))}</button></form>
-  <div class="card mt">${L.length ? `<div class="list">${L.map((h) => row({ title: h.title, sub: fmtDate(h.date) + " · " + t("{n} done", { n: (h.D || []).length }) + "/" + stu.length, right: icon(h.id === st.id ? "down" : "right"), act: "hw-open", arg: h.id })).join("")}</div>` : empty(t("No homework yet."), "book")}</div>
-  ${cur ? `<div class="card mt"><div class="card-h"><h3>${esc(cur.title)}</h3>${btn(t("All done"), "hw-all", { sm: true })}</div>
-    ${stu.map((s) => `<div class="omr"><div class="omr-n"><b>${esc(s.name)}</b><span class="mut sm">${esc(s.roll || "")}</span></div><button class="sw" data-act="hw-tog" data-arg="${esc(s.id)}" aria-pressed="${st.D.includes(s.id)}" data-free="1" aria-label="${esc(t("Done"))}"></button></div>`).join("")}
-    <div class="row mt">${btn(t("Save"), "hw-save", { kind: "pri", ic: "check" })}${cur.fid ? btn(t("File"), "hw-file", { arg: cur.fid, ic: "download" }) : ""}${isStaff() ? btn(t("Delete"), "hw-del", { arg: cur.id, kind: "bad", ic: "trash" }) : ""}</div></div>` : ""}`;
-}, { title: "Homework" });
-onSubmit("hw-add", async (el) => {
-  const f = formData(el.closest("form"));
-  if (!f.title.trim()) return toast(t("Write the homework"), "bad");
-  const id = await db.add("hw", { bid: S.bid, title: f.title.trim(), date: f.date || T(), D: [] });
-  dropBatchCache(S.bid);
-  notify("batch", t("New homework: {n}", { n: f.title.trim() }), S.bid);
-  H().id = id;
-  refresh();
-});
-act("hw-open", (el) => { const st = H(); st.id = st.id === el.dataset.arg ? "" : el.dataset.arg; st.hid = ""; refresh(); });
-act("hw-tog", (el) => {
-  const st = H(), id = el.dataset.arg, i = st.D.indexOf(id);
-  i < 0 ? st.D.push(id) : st.D.splice(i, 1);
-  el.setAttribute("aria-pressed", String(i < 0));
-});
-act("hw-all", () => { const st = H(); st.D = activeStudents().map((s) => s.id); refresh(); });
-act("hw-save", async () => {
-  const st = H(), h = (await batchData(S.bid)).hw.find((x) => x.id === st.id);
-  if (!h) return;
-  const { id, ...x } = h;
-  await db.set("hw/" + id, { ...x, D: st.D });
-  await recalcBatch(S.bid);
-  toast(t("Saved"), "ok");
-  st.hid = ""; refresh();
-});
-act("hw-del", async (el) => {
-  const h = (await batchData(S.bid)).hw.find((x) => x.id === el.dataset.arg);
-  if (!(await ask(t("Delete this homework?"), { danger: true, ok: t("Delete") }))) return;
-  if (h && h.fid) await delFile(h.fid).catch(() => {});
-  await db.del("hw/" + el.dataset.arg);
-  await recalcBatch(S.bid);
-  logAct("Deleted homework");
-  H().id = ""; H().hid = ""; refresh();
-});
-act("hw-file", async (el) => { toast(t("Downloading…")); await downloadFile(el.dataset.arg); });
 
 // ---------- routine ----------
 const DY = ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"], JD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -276,4 +245,6 @@ addBN({
   "No published exam yet. Publish an exam result first.": "এখনো কোনো প্রকাশিত পরীক্ষা নেই। আগে পরীক্ষার ফল প্রকাশ করুন।", "Send result to guardians": "অভিভাবকদের ফল পাঠান", "Tap SMS or WhatsApp for each guardian (free, uses your own phone). Email works when a guardian email is saved.": "প্রতিটি অভিভাবকের জন্য SMS বা WhatsApp চাপুন (বিনামূল্যে, আপনার নিজের ফোন দিয়ে)। অভিভাবকের ইমেইল সেভ থাকলে ইমেইলও যাবে।",
   "Email all guardians": "সব অভিভাবককে ইমেইল", "Dear Guardian, ": "প্রিয় অভিভাবক, ", "Result: {e} - {n}": "ফলাফল: {e} - {n}", "No guardian email saved.": "অভিভাবকের ইমেইল সেভ নেই।", "No guardian email is saved yet.": "এখনো কোনো অভিভাবকের ইমেইল সেভ নেই।",
   "Emails sent: {a} / {b}": "ইমেইল পাঠানো হয়েছে: {a} / {b}", "Email": "ইমেইল", "Save": "সংরক্ষণ", "Delete": "মুছুন",
+  "Today's Absent Students": "আজকের অনুপস্থিত শিক্ষার্থী", "Attendance taken for {a} of {b} batches today.": "আজ {b}টির মধ্যে {a}টি ব্যাচের উপস্থিতি নেওয়া হয়েছে।",
+  "No absent students today.": "আজ কোনো শিক্ষার্থী অনুপস্থিত নেই।", "Attendance has not been taken yet today.": "আজ এখনো উপস্থিতি নেওয়া হয়নি।",
 });

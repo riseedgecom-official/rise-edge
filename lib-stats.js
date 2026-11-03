@@ -10,12 +10,12 @@ function denseRank(rows, key) {
   return (r) => (r[key] == null ? null : vals.indexOf(Math.round(r[key] * 100)) + 1);
 }
 
-// Attendance %, exam %, homework %, overall % and ranks of every student of a batch for a period.
-// students: [{id,...}]  att: [{date,A,E}]  exams: [{date,pub,title,subs}]  hw: [{date,D}]
-export function calcBatch({ students, att = [], exams = [], hw = [], from, to = "9999-12-31" }) {
+// Attendance %, exam %, performance %, overall % and ranks of every student of a batch for a period.
+// students: [{id,...}]  att: [{date,A,E}]  exams: [{date,pub,title,subs}]  perf: published assessments [{date,max,m:{studentId:marks}}]
+export function calcBatch({ students, att = [], exams = [], perf = [], from, to = "9999-12-31" }) {
   const A = att.filter((d) => d.date >= from && d.date <= to);
   const E = exams.filter((e) => e.date >= from && e.date <= to && e.pub !== false);
-  const H = hw.filter((h) => h.date >= from && h.date <= to);
+  const H = perf.filter((h) => h.date >= from && h.date <= to && +h.max > 0 && h.pub !== false);
   const rows = students.map((s) => {
     let p = 0, a = 0, g = 0, tot = 0;
     const items = [];
@@ -32,10 +32,11 @@ export function calcBatch({ students, att = [], exams = [], hw = [], from, to = 
       }
     }
     const at = p + a ? (p / (p + a)) * 100 : null;
-    const hwp = H.length ? (H.filter((h) => (h.D || []).includes(s.id)).length / H.length) * 100 : null;
-    const pr = [at, hwp].filter((v) => v != null);
+    const pv = H.filter((h) => (h.m || {})[s.id] != null && Number.isFinite(+h.m[s.id])).map((h) => Math.min(100, Math.max(0, (+h.m[s.id] / h.max) * 100)));
+    const pfp = pv.length ? pv.reduce((x, y) => x + y) / pv.length : null;
+    const pr = [at, pfp].filter((v) => v != null);
     return {
-      id: s.id, s, items, p, a, days: A.length, at, hw: hwp,
+      id: s.id, s, items, p, a, days: A.length, at, pf: pfp,
       ex: tot ? (g / tot) * 100 : null,
       ov: pr.length ? pr.reduce((x, y) => x + y) / pr.length : null,
       gt: n2(g), tt: n2(tot),
@@ -46,7 +47,7 @@ export function calcBatch({ students, att = [], exams = [], hw = [], from, to = 
 }
 
 // compact row stored in bstat/{batch} (what a student is allowed to see)
-export const statRow = (r) => ({ ex: r.ex, er: r.er, ov: r.ov, or: r.or, p: r.p, a: r.a, hw: r.hw });
+export const statRow = (r) => ({ ex: r.ex, er: r.er, ov: r.ov, or: r.or, p: r.p, a: r.a, pf: r.pf });
 
 // A subject counts in ranks, reports and results only when it was held AND its marks are final.
 // ws: "d" draft | "s" submitted, waiting for approval | "a" approved (no ws = old data = final).
@@ -102,11 +103,16 @@ export function nextMonth(m, n = 1) {
   const yy = y + Math.floor(mo / 12), mm = ((mo % 12) + 12) % 12;
   return yy + "-" + String(mm + 1).padStart(2, "0");
 }
-// the month of a time stamp, in the device's local time
+// the month of a time stamp, in Bangladesh time (Asia/Dhaka)
 export function monthOfTime(ms) {
   if (!(+ms > 0)) return "";
-  const d = new Date(+ms);
-  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+  try {
+    const p = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Dhaka", year: "numeric", month: "2-digit" }).formatToParts(new Date(+ms));
+    return p.find((x) => x.type === "year").value + "-" + p.find((x) => x.type === "month").value;
+  } catch (e) {
+    const d = new Date(+ms);
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+  }
 }
 
 // ---- smart monthly fee ----
@@ -163,20 +169,44 @@ export const rollOf = (role, year, n) => rollPrefix(role, year) + String(n).padS
 export const counterKey = (role, year) => (role === "student" ? "S" : "T") + year;
 
 // ---------- ready-made batches ----------
+// A batch belongs to a class (+ group for class 9-12) and may be for Boys ("M"), Girls ("F") or everybody ("" = mixed, the old kind).
 export const GROUPS = ["Science", "Commerce", "Arts"];
+export const GD_WORD = { M: "Boys", F: "Girls" };
+export const isGd = (g) => g === "M" || g === "F";
+export const batchTitle = (cls, grp, gd) => (cls ? "Class " + cls : "Batch") + (+cls >= 9 && grp ? " " + grp : "") + (isGd(gd) ? " – " + GD_WORD[gd] : "");
+const autoId = (cls, grp, gd) => "auto-c" + cls + (grp ? "-" + grp.toLowerCase() : "") + (isGd(gd) ? "-" + gd.toLowerCase() : "");
+export const batchSpec = (cls, grp, gd) => ({ id: autoId(cls, grp, gd), name: batchTitle(cls, grp, gd), cls: "" + cls, grp: grp || "", gd: isGd(gd) ? gd : "" });
+// the batches a new academy starts with: every class (and group), one for the boys and one for the girls
 export function defaultBatches() {
-  const L = [4, 5, 6, 7, 8].map((c) => ({ id: "auto-c" + c, name: "Class " + c, cls: "" + c, grp: "" }));
-  for (const c of [9, 10, 11, 12]) for (const g of GROUPS) L.push({ id: "auto-c" + c + "-" + g.toLowerCase(), name: "Class " + c + " " + g, cls: "" + c, grp: g });
+  const L = [];
+  for (const c of [4, 5, 6, 7, 8]) for (const gd of ["M", "F"]) L.push(batchSpec(c, "", gd));
+  for (const c of [9, 10, 11, 12]) for (const g of GROUPS) for (const gd of ["M", "F"]) L.push(batchSpec(c, g, gd));
   return L;
 }
-// find the batch for a class (+ group for class 9-12)
-export function findBatch(list, cls, grp) {
+// is there already a batch with exactly this class / group / gender?
+export const hasBatch = (list, cls, grp, gd) => (list || []).some((b) => String(b.cls || "") === String(cls) && (b.grp || "") === (grp || "") && (b.gd || "") === (isGd(gd) ? gd : ""));
+// every class / group that has a batch, once: [{cls, grp}]
+export function classGroups(list) {
+  const seen = new Set(), out = [];
+  for (const b of list || []) {
+    const cls = String(b.cls || ""), grp = +cls >= 9 ? b.grp || "" : "";
+    if (!cls || (+cls >= 9 && !grp) || seen.has(cls + "|" + grp)) continue;
+    seen.add(cls + "|" + grp); out.push({ cls, grp });
+  }
+  return out;
+}
+// Find the batch for a class (+ group for class 9-12) and gender. A boy goes to the Boys batch, a girl to the Girls batch;
+// when there is no batch for that gender yet, the old mixed batch of the class is used. Closed batches (off) are never chosen.
+// Without a known gender only a mixed batch fits (so nobody lands in the wrong batch).
+export function findBatch(list, cls, grp, gd) {
   cls = String(cls || "");
   if (!cls) return null;
   const g = +cls >= 9 ? grp || "" : "";
   if (+cls >= 9 && !g) return null;
-  const M = (list || []).filter((b) => String(b.cls || "") === cls && (b.grp || "") === g);
-  return M.find((b) => b.auto) || M[0] || null;
+  const M = (list || []).filter((b) => String(b.cls || "") === cls && (b.grp || "") === g && b.off !== true);
+  const pick = (L) => L.find((b) => b.auto) || L[0] || null;
+  if (isGd(gd)) return pick(M.filter((b) => b.gd === gd)) || pick(M.filter((b) => !isGd(b.gd)));
+  return pick(M.filter((b) => !isGd(b.gd)));
 }
 
 // ---------- syllabus ----------

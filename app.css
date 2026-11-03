@@ -206,6 +206,7 @@ select{appearance:none;-webkit-appearance:none;padding-right:38px;background-ima
 .item-b b{display:block}
 .item-b .mut{display:block}
 .item-a{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.item-a{align-items:center}.item-a>svg{width:18px;height:18px;flex:none;color:var(--ink-2)}
 .tcard{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1.5px solid var(--line-2);border-radius:var(--r-s);background:var(--card);cursor:pointer}
 .tcard:hover{border-color:var(--blue)}
 .tcard-b{flex:1;min-width:0}
@@ -404,3 +405,65 @@ table.tbl{width:100%;border-collapse:collapse;font-size:14px}
 .hint{display:block;color:var(--ink-2);font-size:12px}
 .gs-btn{display:grid}
 @media(min-width:760px){.gs-btn{display:none}}
+
+/* ---------- Performance (teacher entry + student progress) ---------- */
+.pf-list{display:flex;flex-direction:column;gap:10px}
+.pf-c{--c:var(--blue);display:flex;align-items:center;gap:12px;padding:10px 12px;border:1.5px solid color-mix(in srgb,var(--c) 32%,var(--line));border-left:5px solid var(--c);border-radius:var(--r);background:linear-gradient(90deg,color-mix(in srgb,var(--c) 7%,var(--card)),var(--card) 60%)}
+.pf-c:nth-child(4n+2){--c:var(--violet)}
+.pf-c:nth-child(4n+3){--c:var(--teal)}
+.pf-c:nth-child(4n+4){--c:var(--gold)}
+.pf-c .av{flex:none;border-radius:50%}
+.pf-n{flex:1;min-width:0}
+.pf-n b{display:block;font-size:16px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pf-n span{display:block}
+.pf-m{display:flex;align-items:center;gap:6px;flex:none}
+.pf-m input{width:84px;height:46px;text-align:center;font-size:20px;font-weight:800;border:1.5px solid var(--line-2);border-radius:var(--r-s);background:var(--card);padding:0 6px}
+.pf-m input:focus{border-color:var(--c)}
+.pf-m input:disabled{opacity:.7}
+.pf-of{color:var(--ink-2);font-weight:700;font-size:14px;white-space:nowrap}
+.pf-c.pf-bad{--c:var(--bad);background:color-mix(in srgb,var(--bad) 8%,var(--card))}
+.pf-c.pf-bad .pf-m input{border-color:var(--bad);color:var(--bad)}
+.pf-bar{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+.pf-bar .btn{flex:1 1 150px;justify-content:center;min-height:48px;font-weight:700}
+.pf-chart{width:100%;height:auto;display:block}
+.pf-rec{border:1.5px solid var(--line);border-top:4px solid var(--blue);border-radius:var(--r);background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:8px;box-shadow:var(--shadow)}
+.pf-rec-h{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pf-rec-m{white-space:nowrap;font-size:20px}
+.pf-rec-f{display:flex;justify-content:space-between;align-items:center;font-size:14px}
+
+/* ---------- Admin dashboard: Batch Overview, Fee Collection Overview, Today's Absent ---------- */
+.card.bo-card{border-top:4px solid var(--blue)}
+.card.fo{border-top:4px solid var(--gold)}
+.card.ab{border-top:4px solid var(--bad)}
+.bo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:12px}
+.bo{--c:var(--blue);display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;font:inherit;color:inherit;cursor:pointer;padding:12px;border:1.5px solid color-mix(in srgb,var(--c) 45%,var(--line));border-top:5px solid var(--c);border-radius:var(--r);background:color-mix(in srgb,var(--c) 6%,var(--card));box-shadow:var(--shadow);transition:transform .12s}
+.bo:hover{transform:translateY(-2px)}
+.bo-n{font-weight:800;font-size:15px;line-height:1.25}
+.bo-m{font-size:12px;color:var(--ink-2)}
+.bo-c{display:flex;align-items:baseline;gap:6px;margin-top:4px}
+.bo-c b{font-size:28px;line-height:1;letter-spacing:-.02em}
+.bo-c small{color:var(--ink-2);font-size:11px}
+.bo-s{font-size:11px;font-weight:800;padding:1px 9px;border-radius:99px;border:1.5px solid currentColor}
+.bo-s--ok{color:var(--ok)}.bo-s--bad{color:var(--bad)}.bo-s--warn{color:var(--warn)}
+.fo .icon-btn{width:34px;height:34px}
+.fo-grid{display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:center}
+@media (max-width:380px){.fo-grid{grid-template-columns:1fr;justify-items:center}}
+.fo-chart svg{width:150px;height:150px;display:block}
+.fo-sum{display:flex;flex-direction:column;gap:10px;min-width:0;width:100%}
+.fo-s{--c:var(--ok);display:flex;flex-direction:column;padding:8px 12px;border:1.5px solid color-mix(in srgb,var(--c) 45%,var(--line));border-left:5px solid var(--c);border-radius:var(--r-s);background:color-mix(in srgb,var(--c) 7%,var(--card))}
+.fo-s--bad{--c:var(--bad)}
+.fo-s span{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--ink-2)}
+.fo-s span svg{width:15px;height:15px;color:var(--c)}
+.fo-s b{font-size:22px;line-height:1.2;letter-spacing:-.02em}
+.fo-s small{color:var(--ink-2);font-size:12px}
+.fo-tot{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:4px 12px;margin-top:14px;padding:10px 14px;border-radius:var(--r-s);background:linear-gradient(90deg,var(--nav),color-mix(in srgb,var(--blue) 65%,var(--nav)));color:#fff}
+.fo-tot b{font-size:20px}
+.fo-tot .mut{color:#c9d6f5}
+.fo-leg{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--ink-2)}
+.fo-leg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px}
+.ab-g{display:flex;justify-content:space-between;align-items:center;margin:12px 0 2px;padding:6px 10px;border-radius:var(--r-s);background:color-mix(in srgb,var(--bad) 8%,var(--soft));border:1px solid var(--line);font-size:13px}
+.ab-g span{font-weight:800;color:var(--bad)}
+.ab-r .av{flex:none}
+.ab-r .item-b span{display:block}
+.ab-name{all:unset;box-sizing:border-box;cursor:pointer;display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;color:var(--blue-ink);text-decoration:underline;text-underline-offset:3px}
+.ab-name:focus-visible{outline:3px solid color-mix(in srgb,var(--blue) 55%,transparent);outline-offset:2px;border-radius:4px}

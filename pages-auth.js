@@ -2,7 +2,7 @@
 // "choose a new password" box and the "config.js is not filled" screen.
 import { db, signIn, sendReset, changePassword, withNewAccount, isEmailInUse, authEmail, dbError } from "./lib-db.js";
 import { S, $, esc, t, act, onSubmit, onChange, formData, lk, isEmail, addBN, instName } from "./lib-core.js";
-import { icon, input, select, notice, toast, form, chips, clsOptions, grpOptions } from "./lib-ui.js";
+import { icon, input, select, notice, toast, form, chips, clsOptions, grpOptions, gdOptions, gdLabel } from "./lib-ui.js";
 import { loadInst, selfRegister, sendMail } from "./lib-svc.js";
 
 const $app = () => document.getElementById("app");
@@ -151,6 +151,7 @@ async function renderRegister(review = false) {
     ${input("nick", { label: t("Nickname (optional)"), value: r.nick || "" })}
     ${st ? `${select("cls", clsOptions(), r.cls || "", { label: t("Class"), "data-change": "reg-cls" })}
       <div id="grp-box" ${+r.cls >= 9 ? "" : "hidden"}>${select("grp", grpOptions(), r.grp || "", { label: t("Group (Class 9-12)") })}</div>
+      ${select("gd", gdOptions(), r.gd || "", { label: t("Gender"), hint: t("You are added to the Boys or the Girls batch of your class.") })}
       ${input("school", { label: t("School / college"), value: r.school || "" })}`
       : `${input("subject", { label: t("Subject you teach"), value: r.subject || "" })}${select("cls", clsOptions(), r.cls || "", { label: t("Class you teach (optional)") })}`}
     ${input("phone", { label: st ? t("Your phone number") : t("Phone number"), type: "tel", inputmode: "tel", value: r.phone || "", placeholder: "01XXXXXXXXX" })}
@@ -174,6 +175,7 @@ onSubmit("reg-review", (el) => {
   const bad = !r.name || !r.name.trim() ? t("Enter your full name.")
     : st && !r.cls ? t("Choose your class.")
     : st && +r.cls >= 9 && !r.grp ? t("Choose your group (Science / Commerce / Arts).")
+    : st && r.gd !== "M" && r.gd !== "F" ? t("Choose your gender (Male / Female).")
     : !phoneOk(r.phone) ? t("Enter a valid phone number (01XXXXXXXXX).")
     : st && !phoneOk(r.gphone) ? t("Enter a valid guardian phone number (01XXXXXXXXX).")
     : r.email && !isEmail(r.email) ? t("The email looks wrong.")
@@ -186,7 +188,7 @@ onSubmit("reg-review", (el) => {
 function renderReview() {
   redraw = renderReview;
   const r = REG, st = r.role === "student";
-  const rows = [[t("Name"), r.name], [t("Nickname"), r.nick], st ? [t("Class"), r.cls ? t("Class {n}", { n: r.cls }) + (r.grp ? " · " + t(r.grp) : "") : ""] : [t("Subject"), r.subject],
+  const rows = [[t("Name"), r.name], [t("Nickname"), r.nick], st ? [t("Class"), r.cls ? t("Class {n}", { n: r.cls }) + (r.grp ? " · " + t(r.grp) : "") : ""] : [t("Subject"), r.subject], st ? [t("Gender"), gdLabel(r.gd)] : null,
     st ? [t("School / college"), r.school] : [t("Class"), r.cls ? t("Class {n}", { n: r.cls }) : ""], [t("Phone"), r.phone], st ? [t("Guardian's phone"), r.gphone] : null, st ? [t("Guardian's email"), r.gem] : null,
     [t("Address"), r.addr], [t("Email"), r.email]].filter((x) => x && x[1]);
   $app().innerHTML = frame(`<div class="card stack"><h2>${esc(t("Check your details"))}</h2>
@@ -262,4 +264,8 @@ addBN({
   "Menu": "মেনু", "Logout": "লগআউট", "Search student / teacher": "ছাত্র / শিক্ষক খুঁজুন", "Search": "খুঁজুন", "Nothing found": "কিছু পাওয়া যায়নি", "Alerts": "বার্তা", "Something went wrong": "কিছু একটা ভুল হয়েছে", "Try again": "আবার চেষ্টা করুন",
   "Opening your page…": "আপনার পাতা খুলছে…", "This account is switched off. Please ask the admin.": "এই অ্যাকাউন্ট বন্ধ আছে। অ্যাডমিনকে জানান।", "No account found for this login. Ask the admin, or register.": "এই লগইনের কোনো অ্যাকাউন্ট নেই। অ্যাডমিনকে জানান অথবা রেজিস্ট্রেশন করুন।",
   "Show": "দেখাও", "Hide": "লুকাও", "Co-admin panel": "কো-অ্যাডমিন প্যানেল", "Settings": "সেটিংস", "Month": "মাস", "Class": "ক্লাস",
+});
+addBN({
+  "Gender": "লিঙ্গ", "Male": "ছেলে", "Female": "মেয়ে", "Boys": "ছেলেদের", "Girls": "মেয়েদের", "Mixed (boys and girls)": "মিশ্র (ছেলে ও মেয়ে)",
+  "You are added to the Boys or the Girls batch of your class.": "আপনি আপনার ক্লাসের ছেলেদের বা মেয়েদের ব্যাচে যুক্ত হবেন।", "Choose your gender (Male / Female).": "লিঙ্গ বেছে নিন (ছেলে / মেয়ে)।",
 });

@@ -25,8 +25,8 @@ page("month", async () => {
   return `${batchPicker()}
   ${card(t("This month"), `<p class="mut">${esc(t("Month started on {d}", { d: fmtDate(b.start) }))}</p><div class="row">${btn(t("Recalculate"), "mo-recalc", { sm: true, ic: "refresh" })}${btn(t("Start new month"), "mo-new", { kind: "pri", sm: true, ic: "calendar" })}</div>
     <p class="mut sm mt">${esc(t("Starting a new month saves this month's results in Records and begins a fresh count today."))}</p>`)}
-  <div class="card mt"><div class="tw"><table class="tbl"><tr><th>${esc(t("Name"))}</th><th class="n">${esc(t("Attendance"))}</th><th class="n">${esc(t("Exam"))}</th><th class="n">${esc(t("Homework"))}</th><th class="n">${esc(t("Overall"))}</th><th class="n">#</th></tr>
-  ${rows.map(({ s, r }) => `<tr><td>${esc(s.name)}</td><td class="n">${f1(att(r))}</td><td class="n">${f1(r.ex)}</td><td class="n">${f1(r.hw)}</td><td class="n"><b>${f1(r.ov)}</b></td><td class="n">${r.or || "–"}</td></tr>`).join("") || `<tr><td colspan="6">${esc(t("No students in this batch."))}</td></tr>`}</table></div></div>`;
+  <div class="card mt"><div class="tw"><table class="tbl"><tr><th>${esc(t("Name"))}</th><th class="n">${esc(t("Attendance"))}</th><th class="n">${esc(t("Exam"))}</th><th class="n">${esc(t("Performance"))}</th><th class="n">${esc(t("Overall"))}</th><th class="n">#</th></tr>
+  ${rows.map(({ s, r }) => `<tr><td>${esc(s.name)}</td><td class="n">${f1(att(r))}</td><td class="n">${f1(r.ex)}</td><td class="n">${f1(r.pf)}</td><td class="n"><b>${f1(r.ov)}</b></td><td class="n">${r.or || "–"}</td></tr>`).join("") || `<tr><td colspan="6">${esc(t("No students in this batch."))}</td></tr>`}</table></div></div>`;
 }, { title: "Month" });
 act("mo-recalc", async () => { await recalcBatch(S.bid); toast(t("Recalculated"), "ok"); refresh(); });
 act("mo-new", async () => {
@@ -68,7 +68,7 @@ function reportHtml(d) {
   <div style="${BX};display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:14px">${lb(t("Student name"), d.name)}${lb(t("Roll"), d.roll)}${lb(t("Batch"), d.bn)}${lb(t("Class"), (d.cls ? t("Class {n}", { n: d.cls }) : "") + (d.grp ? " · " + t(d.grp) : ""))}</div>`;
   const cards = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
     <div style="${BX};background:#fff"><div style="color:#33507a">${esc(t("Class attendance"))}</div><div style="font-size:28px;font-weight:800">${f1(d.at)}</div><div style="font-size:12px">${d.p || 0} ${esc(t("present"))} · ${d.a || 0} ${esc(t("absent"))} · ${d.days || 0} ${esc(t("days"))}</div></div>
-    <div style="${BX};background:#fff"><div style="color:#33507a">${esc(t("Homework"))}</div><div style="font-size:28px;font-weight:800">${f1(d.hw)}</div></div>
+    <div style="${BX};background:#fff"><div style="color:#33507a">${esc(t("Performance"))}</div><div style="font-size:28px;font-weight:800">${f1(d.pf)}</div></div>
     <div style="${BX};background:#fff"><div style="color:#33507a">${esc(t("Exam rank"))}</div><div style="font-size:28px;font-weight:800">${d.er ? "#" + d.er : "–"}</div><div style="font-size:12px">${esc(t("of {n} students", { n: d.n || 0 }))}</div></div>
     <div style="${BX};background:#fff"><div style="color:#33507a">${esc(t("Overall"))}</div><div style="font-size:28px;font-weight:800">${f1(d.ov)}</div><div style="font-size:12px">${esc(t("Rank"))} ${d.or ? "#" + d.or : "–"}</div></div></div>`;
   const sig = `<div style="display:flex;gap:16px;margin-top:40px;text-align:center;font-size:13px">${[t("Class teacher"), t("Guardian"), t("Principal")].map((x) => `<div style="flex:1;border-top:1px solid #33507a;padding-top:6px">${esc(x)}</div>`).join("")}</div><div style="font-size:11px;color:#5b6b80;text-align:right;margin-top:10px">${esc(t("Generated"))}: ${esc(d.date || "")}</div>`;
@@ -86,11 +86,11 @@ function reportHtml(d) {
   return `<div class="paper">${top}${H(esc(t("Overall performance growth (month by month)")))}<div style="${BX};background:#fff"><div style="display:flex;align-items:flex-end;gap:8px;height:170px;border-bottom:1px solid #9fb2d8;padding:0 4px">${ks.map((k) => `<div style="flex:1;text-align:center"><div style="font-size:11px;font-weight:700">${Math.round(pc(k))}%</div><div style="height:${Math.max(4, pc(k) * 1.2)}px;background:#1a73e8;border-radius:4px 4px 0 0"></div></div>`).join("") || `<div class="mut">${esc(t("No exam this year"))}</div>`}</div><div style="display:flex;gap:8px;padding:4px">${ks.map((k) => `<div style="flex:1;text-align:center;font-size:11px">${MN3[k]}</div>`).join("")}</div></div>
   ${H(esc(t("Annual subject mastery")))}<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;border:1px solid #c9d8ee"><tr><th style="${TH}">${esc(t("Subject"))}</th><th style="${TH}">Jan–Mar</th><th style="${TH}">Apr–Jun</th><th style="${TH}">Jul–Sep</th><th style="${TH}">Oct–Dec</th><th style="${TH}">${esc(t("Year"))}</th><th style="${TH}">${esc(t("Assessment"))}</th></tr>
   ${A.map((x) => { const p = x.t ? (x.g / x.t) * 100 : 0; return `<tr><td style="${TD}"><b>${esc(x.n)}</b></td>${[0, 1, 2, 3].map((q) => `<td style="${TD}">${Q(x.n, q) == null ? "–" : Math.round(Q(x.n, q)) + "%"}</td>`).join("")}<td style="${TD}"><b>${Math.round(p)}%</b></td><td style="${TD}">${esc(verdict(x.n, p))}</td></tr>`; }).join("") || `<tr><td colspan="7" style="${TD}">${esc(t("No exam this year"))}</td></tr>`}</table></div>
-  ${H(esc(t("Attendance, homework and rank (year)")))}${cards}${H(esc(t("Final recommendation")))}${comment}${sig}</div>`;
+  ${H(esc(t("Attendance, performance and rank (year)")))}${cards}${H(esc(t("Final recommendation")))}${comment}${sig}</div>`;
 }
 const snapOf = (r, cm, ty, from, to) => {
   const b = curBatch() || {};
-  return { ty, bn: b.name || "", cls: b.cls || "", grp: r.s.grp || b.grp || "", from, to, name: r.s.name, roll: r.s.roll, it: r.items.map((x) => ({ n: x.ex + " – " + x.n, sb: x.n, d: x.d, g: x.g, t: x.t })), p: r.p, a: r.a, days: r.days, at: r.at, hw: r.hw, ex: r.ex, er: r.er, ov: r.ov, or: r.or, n: r.n, cm, date: T() };
+  return { ty, bn: b.name || "", cls: b.cls || "", grp: r.s.grp || b.grp || "", from, to, name: r.s.name, roll: r.s.roll, it: r.items.map((x) => ({ n: x.ex + " – " + x.n, sb: x.n, d: x.d, g: x.g, t: x.t })), p: r.p, a: r.a, days: r.days, at: r.at, pf: r.pf, ex: r.ex, er: r.er, ov: r.ov, or: r.or, n: r.n, cm, date: T() };
 };
 let RR = [], RD = null;
 const period = () => { const st = Rp(), b = curBatch(); return st.ty === "y" ? [(st.ry || T().slice(0, 4)) + "-01-01", (st.ry || T().slice(0, 4)) + "-12-31"] : [st.mf || b.start, st.mt || T()]; };
@@ -100,7 +100,7 @@ page("reports", async () => {
   const st = Rp(); st.ty = st.ty || "m"; st.ry = st.ry || T().slice(0, 4);
   const [from, to] = period(), key = S.bid + "_" + from + "_" + to;
   const d = await batchData(S.bid);
-  RR = calcBatch({ students: activeStudents(), ...d, from, to });
+  RR = calcBatch({ students: activeStudents(), att: d.att, exams: d.exams, perf: d.pa, from, to });
   RD = (await db.get("rep/" + key).catch(() => null)) || { c: {} };
   return `${batchPicker()}${chips([{ k: "m", label: t("Monthly report") }, { k: "y", label: t("Yearly report") }], st.ty, "rp-ty")}
   <div class="card stack-s">${st.ty === "y" ? input("ry", { type: "number", label: t("Year"), value: st.ry, "data-change": "rp-year", min: "2000", max: "2100" }) : `<div class="grid g2">${input("mf", { type: "date", label: t("From"), value: from, "data-change": "rp-from" })}${input("mt", { type: "date", label: t("To"), value: to, "data-change": "rp-to" })}</div>`}
@@ -139,7 +139,7 @@ const Y = () => pageState("ys");
 const yKey = () => (Y().m === "y" ? Y().yy : Y().mo);
 async function buildPoster(b, y, mo) {
   const from = mo ? mo + "-01" : y + "-01-01", to = mo ? mo + "-31" : y + "-12-31", d = await batchData(b.id);
-  const R = calcBatch({ students: S.U.filter((s) => s.bid === b.id && s.active !== false), ...d, from, to }).filter((r) => r.ex != null).sort((p, q) => q.ex - p.ex);
+  const R = calcBatch({ students: S.U.filter((s) => s.bid === b.id && s.active !== false), att: d.att, exams: d.exams, perf: d.pa, from, to }).filter((r) => r.ex != null).sort((p, q) => q.ex - p.ex);
   const sm = (r) => r.items.reduce((a, x) => [a[0] + x.g, a[1] + x.t], [0, 0]).map(n2);
   return { bid: b.id, bn: b.name, cls: b.cls || "", year: y, mon: mo || "", top: R.slice(0, 3).map((r) => { const [g, tt] = sm(r); return { name: r.s.name, grp: r.s.grp || "", pic: r.s.pic || "", g, t: tt, ex: r.ex }; }), n: R.length, ap: R.filter((r) => r.ex >= 80).length, a: R.filter((r) => r.ex >= 70 && r.ex < 80).length, pass: R.length ? Math.round((R.filter((r) => r.ex >= 33).length / R.length) * 100) : 0 };
 }
@@ -191,13 +191,13 @@ act("ys-pub", async (el) => {
 
 addBN({
   "This month": "এই মাস", "Month started on {d}": "মাস শুরু {d}", "Recalculate": "আবার হিসাব", "Start new month": "নতুন মাস শুরু", "Starting a new month saves this month's results in Records and begins a fresh count today.": "নতুন মাস শুরু করলে এই মাসের ফল Records এ জমা হবে এবং আজ থেকে নতুন গণনা শুরু হবে।",
-  "Name": "নাম", "Attendance": "উপস্থিতি", "Exam": "পরীক্ষা", "Homework": "হোমওয়ার্ক", "Overall": "সার্বিক", "No students in this batch.": "এই ব্যাচে কোনো ছাত্র নেই।", "Recalculated": "আবার হিসাব হয়েছে",
+  "Name": "নাম", "Attendance": "উপস্থিতি", "Exam": "পরীক্ষা", "Performance": "পারফরম্যান্স", "Overall": "সার্বিক", "No students in this batch.": "এই ব্যাচে কোনো ছাত্র নেই।", "Recalculated": "আবার হিসাব হয়েছে",
   "Close this month and start a new one today?": "এই মাস বন্ধ করে আজ থেকে নতুন মাস শুরু করবেন?", "New month started": "নতুন মাস শুরু হয়েছে", "Past months": "আগের মাসগুলো", "Closed months are saved here automatically.": "শেষ হওয়া মাসগুলো এখানে নিজে থেকেই জমা হয়।",
   "Yearly progress report": "বার্ষিক অগ্রগতি প্রতিবেদন", "Monthly progress report": "মাসিক অগ্রগতি প্রতিবেদন", "Student name": "ছাত্রের নাম", "Roll": "রোল", "Batch": "ব্যাচ", "Class attendance": "ক্লাসে উপস্থিতি", "present": "উপস্থিত", "absent": "অনুপস্থিত", "days": "দিন",
   "Exam rank": "পরীক্ষার র‍্যাঙ্ক", "of {n} students": "{n} জনের মধ্যে", "Rank": "র‍্যাঙ্ক", "Class teacher": "শ্রেণি শিক্ষক", "Guardian": "অভিভাবক", "Principal": "অধ্যক্ষ", "Generated": "তৈরি", "Recommendation": "সুপারিশ", "Strengths and areas to improve": "শক্তির দিক ও উন্নতির জায়গা",
   "Academic performance (exams and tests)": "একাডেমিক পারফরম্যান্স (পরীক্ষা)", "Subject": "বিষয়", "Exams": "পরীক্ষা", "Best": "সর্বোচ্চ", "Total": "মোট", "Grade": "গ্রেড", "No exam in this period": "এই সময়ে কোনো পরীক্ষা নেই", "Overall exam": "সামগ্রিক পরীক্ষা",
   "Attendance and overview": "উপস্থিতি ও সারসংক্ষেপ", "Teacher's comment": "শিক্ষকের মন্তব্য", "Steady improvement": "ধারাবাহিক উন্নতি", "Consistently outstanding": "ধারাবাহিকভাবে অসাধারণ", "Consistent": "ধারাবাহিক", "Satisfactory": "সন্তোষজনক", "Needs focused practice": "মনোযোগী অনুশীলন দরকার",
-  "Overall performance growth (month by month)": "সামগ্রিক অগ্রগতি (মাস ধরে)", "No exam this year": "এ বছর কোনো পরীক্ষা নেই", "Annual subject mastery": "বার্ষিক বিষয়ভিত্তিক দক্ষতা", "Year": "বছর", "Assessment": "মূল্যায়ন", "Attendance, homework and rank (year)": "উপস্থিতি, হোমওয়ার্ক ও র‍্যাঙ্ক (বছর)", "Final recommendation": "চূড়ান্ত সুপারিশ",
+  "Overall performance growth (month by month)": "সামগ্রিক অগ্রগতি (মাস ধরে)", "No exam this year": "এ বছর কোনো পরীক্ষা নেই", "Annual subject mastery": "বার্ষিক বিষয়ভিত্তিক দক্ষতা", "Year": "বছর", "Assessment": "মূল্যায়ন", "Attendance, performance and rank (year)": "উপস্থিতি, পারফরম্যান্স ও র‍্যাঙ্ক (বছর)", "Final recommendation": "চূড়ান্ত সুপারিশ",
   "Monthly report": "মাসিক রিপোর্ট", "Yearly report": "বার্ষিক রিপোর্ট", "From": "থেকে", "To": "পর্যন্ত", "Only published exams are counted. One comment per student; it is printed on the report.": "শুধু প্রকাশিত পরীক্ষা গণনা হয়। প্রতি ছাত্রের একটি মন্তব্য; রিপোর্টে ছাপা হবে।", "Roll {r}": "রোল {r}",
   "Preview": "প্রিভিউ", "Save comments": "মন্তব্য সংরক্ষণ", "Publish to students": "ছাত্রদের জন্য প্রকাশ করুন", "Comments saved": "মন্তব্য সংরক্ষিত", "Yearly progress report published": "বার্ষিক অগ্রগতি রিপোর্ট প্রকাশিত", "Monthly progress report published": "মাসিক অগ্রগতি রিপোর্ট প্রকাশিত", "Published to students": "ছাত্রদের জন্য প্রকাশিত",
   "My reports": "আমার রিপোর্ট", "No report has been published yet.": "এখনো কোনো রিপোর্ট প্রকাশিত হয়নি।", "Month": "মাস", "Result sheet": "ফলাফল শিট", "View": "দেখুন", "Not published yet.": "এখনো প্রকাশিত হয়নি।", "Monthly result": "মাসিক ফলাফল", "Yearly result": "বার্ষিক ফলাফল",

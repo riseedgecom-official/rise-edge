@@ -15,10 +15,15 @@ export const money = (v) => "৳" + (Math.round(num(v) * 100) / 100).toLocaleStr
 export const debounce = (fn, ms = 200) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// dates are plain "YYYY-MM-DD" strings in the device's local time (Bangladesh)
+// dates are plain "YYYY-MM-DD" strings. "Today" always follows Bangladesh time (Asia/Dhaka), whatever the device clock says.
 const pad = (n) => String(n).padStart(2, "0");
 export const isoOf = (d) => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
-export const T = () => isoOf(new Date());
+const DHAKA = (() => { try { return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Dhaka", year: "numeric", month: "2-digit", day: "2-digit" }); } catch (e) { return null; } })();
+export const dhakaDate = (d = new Date()) => {
+  if (DHAKA) { const p = DHAKA.formatToParts(d), g = (k) => p.find((x) => x.type === k).value; return g("year") + "-" + g("month") + "-" + g("day"); }
+  return isoOf(d);
+};
+export const T = () => dhakaDate();
 export const mon = (d = T()) => d.slice(0, 7);
 export const addDays = (d, n) => { const x = new Date(d + "T00:00:00"); x.setDate(x.getDate() + n); return isoOf(x); };
 export const monthEnd = (m) => { const [y, mo] = m.split("-").map(Number); return m + "-" + pad(new Date(y, mo, 0).getDate()); };

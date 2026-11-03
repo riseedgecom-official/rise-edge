@@ -6,10 +6,10 @@ import {
 } from "./lib-core.js";
 import {
   icon, avatar, tag, empty, notice, card, row, btn, chips, input, select, field, clsOptions, grpOptions, grpLabel,
-  modal, ask, form, toast, closeModals,
+  gdOptions, gdLabel, batchGdOptions, batchGdLabel, modal, ask, form, toast, closeModals,
 } from "./lib-ui.js";
-import { createAccount, resetPassword, removeUser, reloadPeople, recalcBatch, sendMail, logAct, monthStart } from "./lib-svc.js";
-import { findBatch, subjectsFor, feeStart, isMonth } from "./lib-stats.js";
+import { createAccount, resetPassword, removeUser, reloadPeople, recalcBatch, sendMail, logAct, monthStart, ensureGenderBatches } from "./lib-svc.js";
+import { findBatch, subjectsFor, feeStart, isMonth, batchTitle, isGd } from "./lib-stats.js";
 
 const MAX_CO = 5;
 const findUser = (id) => [...S.U, ...S.TC, ...S.PEND].find((u) => u.id === id);
@@ -19,6 +19,7 @@ const batchLabel = (u) => (u.role === "teacher"
 // one box per teacher: photo, name, small roll under the name. Co-admins are gold.
 const tcard = (x, right = "", act = "open-user") => `<div class="tcard ${x.ca ? "tcard--co" : ""}" data-act="${act}" data-arg="${esc(x.id)}">${avatar(x, 44)}<div class="tcard-b"><b>${esc(x.name)}</b><span class="mut">${esc(x.roll || "")}</span></div><div class="tcard-t">${right}</div></div>`;
 const clsLabel = (u) => (u.cls ? t("Class {n}", { n: u.cls }) + (u.grp ? " · " + t(u.grp) : "") : "");
+const countIn = (b) => S.U.filter((s) => s.bid === b.id && s.active !== false && s.ap !== false).length;
 const reload = async (...bids) => { await reloadPeople(); for (const b of [...new Set(bids.filter(Boolean))]) await recalcBatch(b).catch(() => {}); refresh(); };
 
 // ---------- login details dialog (new account / new password) ----------
@@ -68,26 +69,28 @@ const personFields = (u = {}, isNew = false) => `
   ${input("name", { label: t("Full name"), value: u.name || "" })}
   ${isAdmin() || isNew ? input("nick", { label: t("Nickname"), value: u.nick || "" }) : ""}
   ${u.role === "teacher" ? `${input("subject", { label: t("Subject"), value: u.subject || "" })}${select("cls", clsOptions(), u.cls || "", { label: t("Class (optional)") })}`
-    : `${select("cls", clsOptions(), u.cls || "", { label: t("Class") })}${select("grp", grpOptions(), u.grp || "", { label: t("Group (Class 9-12)") })}${input("school", { label: t("School / college"), value: u.school || "" })}`}
+    : `${select("cls", clsOptions(), u.cls || "", { label: t("Class") })}${select("grp", grpOptions(), u.grp || "", { label: t("Group (Class 9-12)") })}${select("gd", gdOptions(), u.gd || "", { label: t("Gender"), hint: t("Decides the Boys or the Girls batch.") })}${input("school", { label: t("School / college"), value: u.school || "" })}`}
   ${input("phone", { label: t("Phone"), type: "tel", value: u.phone || "", placeholder: "01XXXXXXXXX" })}
   ${u.role === "teacher" ? "" : `${input("gname", { label: t("Guardian name"), value: u.gname || "" })}${input("gphone", { label: t("Guardian's phone"), type: "tel", value: u.gphone || "", placeholder: "01XXXXXXXXX" })}${input("gem", { label: t("Guardian's email"), type: "email", value: u.gem || "" })}`}
   ${input("addr", { label: t("Address"), value: u.addr || "" })}
   ${input("email", { label: t("Email"), type: "email", value: u.email || "" })}`;
 const cleanData = (d, role) => {
   const o = {};
-  for (const k of ["name", "nick", "subject", "cls", "grp", "school", "phone", "gname", "gphone", "gem", "addr", "email"]) if (d[k] !== undefined) o[k] = String(d[k]).trim();
+  for (const k of ["name", "nick", "subject", "cls", "grp", "gd", "school", "phone", "gname", "gphone", "gem", "addr", "email"]) if (d[k] !== undefined) o[k] = String(d[k]).trim();
   if (role !== "teacher" && +o.cls < 9) o.grp = "";
+  if (role === "teacher") delete o.gd;
+  else if (o.gd !== undefined && !isGd(o.gd)) o.gd = "";
   return o;
 };
-const checkPerson = (d, role) => (!d.name.trim() ? t("Enter the name.") : role !== "teacher" && !d.cls ? t("Choose the class.") : role !== "teacher" && +d.cls >= 9 && !d.grp ? t("Choose the group (Science / Commerce / Arts).") : "");
+const checkPerson = (d, role, needGd = false) => (!d.name.trim() ? t("Enter the name.") : role !== "teacher" && !d.cls ? t("Choose the class.") : role !== "teacher" && +d.cls >= 9 && !d.grp ? t("Choose the group (Science / Commerce / Arts).") : role !== "teacher" && needGd && !isGd(d.gd) ? t("Choose the gender (Male / Female).") : "");
 
 act("stu-add", async () => {
   if (!S.B.length) return toast(t("Add a batch first."), "bad");
   let made = null;
   await form(t("Add student"), personFields({ role: "student" }, true), {
-    validate: (d) => checkPerson(d, "student"),
+    validate: (d) => checkPerson(d, "student", true),
     onSave: async (d) => {
-      const x = cleanData(d, "student"), b = findBatch(S.B, x.cls, x.grp);
+      const x = cleanData(d, "student"), b = findBatch(S.B, x.cls, x.grp, x.gd);
       made = { u: { ...x, role: "student" }, r: await createAccount("student", { ...x, bid: b ? b.id : "" }), bid: b && b.id };
     },
   });
@@ -108,7 +111,7 @@ act("open-user", (el) => {
   const B = (label, a, o = {}) => btn(label, a, { arg: u.id, sm: true, ...o });
   modal(`<div class="row-nw">${avatar(u, 56)}<div class="sp"><h3 style="margin:0">${esc(u.name)}</h3><span class="mut">${esc(u.roll || "")}</span><div class="row" style="gap:4px;margin-top:4px">
       ${st ? tag(t("Student")) : tag(t("Teacher"))}${pend ? tag(t("Waiting for approval"), "warn") : ""}${u.active === false ? tag(t("Inactive"), "bad") : ""}${co ? tag(t("Co-admin"), "gold") : ""}${u.pub ? tag(t("Can publish"), "ok") : ""}</div></div></div>
-    <div class="list mt">${kv(t("Nickname"), u.nick)}${kv(t("Class"), clsLabel(u))}${kv(st ? t("Batch") : t("Batches"), bn)}${kv(t("School / college"), u.school)}${kv(t("Subject"), u.subject)}${kv(t("Phone"), u.phone)}${kv(t("Guardian name"), u.gname)}${kv(t("Guardian's phone"), u.gphone)}${kv(t("Guardian's email"), u.gem)}${kv(t("Blood group"), u.bg)}${kv(t("Address"), u.addr)}${kv(t("Email"), u.email)}${st && isAdmin() && +u.fo > 0 ? kv(t("Personal monthly fee"), money(u.fo)) : ""}${st && isAdmin() ? kv(t("First fee month"), feeStart(u) ? monthLabel(feeStart(u)) : t("Not set")) : ""}</div>
+    <div class="list mt">${kv(t("Nickname"), u.nick)}${kv(t("Class"), clsLabel(u))}${st ? kv(t("Gender"), gdLabel(u.gd)) : ""}${kv(st ? t("Batch") : t("Batches"), bn)}${kv(t("School / college"), u.school)}${kv(t("Subject"), u.subject)}${kv(t("Phone"), u.phone)}${kv(t("Guardian name"), u.gname)}${kv(t("Guardian's phone"), u.gphone)}${kv(t("Guardian's email"), u.gem)}${kv(t("Blood group"), u.bg)}${kv(t("Address"), u.addr)}${kv(t("Email"), u.email)}${st && isAdmin() && +u.fo > 0 ? kv(t("Personal monthly fee"), money(u.fo)) : ""}${st && isAdmin() ? kv(t("First fee month"), feeStart(u) ? monthLabel(feeStart(u)) : t("Not set")) : ""}</div>
     <div class="row mt">
       ${pend ? B(t("Approve"), "ap-yes", { kind: "pri", ic: "check" }) + B(t("Reject"), "ap-no", { kind: "bad", ic: "x" }) : ""}
       ${B(t("Edit"), "pu-edit", { ic: "edit" })}${B(t("ID card"), "pu-id", { ic: "idcard" })}
@@ -126,10 +129,14 @@ act("pu-edit", async (el) => {
   const u = target(el);
   closeModals();
   await form(t("Edit"), personFields(u), {
-    validate: (d) => checkPerson(d, u.role),
+    validate: (d) => checkPerson(d, u.role, u.role === "student" && !!u.gd),
     onSave: async (d) => {
       const p = cleanData(d, u.role), old = u.bid;
-      if (u.role === "student" && (p.cls !== u.cls || (p.grp || "") !== (u.grp || ""))) { const b = findBatch(S.B, p.cls, p.grp); if (b) p.bid = b.id; }
+      if (u.role === "student") {
+        // a change of class / group, or of gender inside the student's own class batch, moves him to the matching batch
+        const cur = batchOf(u.bid), clsChg = p.cls !== u.cls || (p.grp || "") !== (u.grp || ""), gdChg = (p.gd || "") !== (u.gd || "");
+        if (clsChg || (gdChg && (!cur || (String(cur.cls) === p.cls && (cur.grp || "") === (p.grp || ""))))) { const b = findBatch(S.B, p.cls, p.grp, p.gd); if (b && b.id !== u.bid) p.bid = b.id; }
+      }
       await db.upd("users/" + u.id, p);
       logAct("Edited " + u.name);
       await reload(old, p.bid);
@@ -251,7 +258,7 @@ act("tch-co", async (el) => {
 // ---------- registrations / approvals ----------
 async function approve(u) {
   const p = { ap: true, ad: Date.now() };
-  if (u.role === "student" && !u.bid) { const b = findBatch(S.B, u.cls, u.grp); if (b) p.bid = b.id; }
+  if (u.role === "student" && !u.bid) { const b = findBatch(S.B, u.cls, u.grp, u.gd); if (b) p.bid = b.id; }
   await db.upd("users/" + u.id, p);
   if (u.email) sendMail(u.email, u.name, t("Registration approved"), t("Your registration at {n} is approved. Login ID: {id}. You can use everything now.", { n: instName(), id: u.roll })).catch(() => {});
   logAct("Approved " + u.name);
@@ -290,33 +297,66 @@ act("ap-fp", async (el) => {
 act("ap-fpx", async (el) => { await db.del("fp/" + el.dataset.arg); refresh(); });
 
 // ---------- batches ----------
+const batchSub = (b) => [clsLabel(b), batchGdLabel(b.gd), t("{n} students", { n: countIn(b) }), t("Month from {d}", { d: fmtDate(b.start) })].filter(Boolean).join(" · ");
+const batchTags = (b) => `${b.gd ? tag(batchGdLabel(b.gd), b.gd === "M" ? "info" : "gold") : ""}${b.off ? tag(t("Closed"), "bad") : ""}`;
 page("batches", () => {
   const q = lk(pageState("bat").q || "");
   const L = S.B.filter((b) => !q || lk(b.name).includes(q));
-  const cnt = (b) => S.U.filter((s) => s.bid === b.id && s.active !== false).length;
   return `<div class="inline mb"><input placeholder="${esc(t("Search batch"))}" value="${esc(pageState("bat").q || "")}" data-input="bat-q">${btn(t("Add batch"), "bat-add", { kind: "pri", ic: "plus" })}</div>
-    <div class="card" id="bat-list">${batchList(L, cnt)}</div>`;
+    <div class="mb">${btn(t("Make Boys & Girls batches"), "bat-gd", { sm: true, ic: "users" })}</div>
+    <div class="card" id="bat-list">${batchList(L)}</div>`;
 }, { title: "Batches" });
-const batchList = (L, cnt) => (L.length ? `<div class="list">${L.map((b) => row({ title: b.name, sub: esc([clsLabel(b), t("{n} students", { n: cnt(b) }), t("Month from {d}", { d: fmtDate(b.start) })].filter(Boolean).join(" · ")), right: icon("right"), act: "bat-open", arg: b.id })).join("")}</div>` : empty(t("No batch found."), "layers"));
+const batchList = (L) => (L.length ? `<div class="list">${L.map((b) => row({ title: b.name, sub: esc(batchSub(b)), right: batchTags(b) + icon("right"), act: "bat-open", arg: b.id })).join("")}</div>` : empty(t("No batch found."), "layers"));
 onInput("bat-q", (el) => {
   pageState("bat").q = el.value;
   const q = lk(el.value), b = document.getElementById("bat-list");
-  if (b) b.innerHTML = batchList(S.B.filter((x) => !q || lk(x.name).includes(q)), (x) => S.U.filter((s) => s.bid === x.id && s.active !== false).length);
+  if (b) b.innerHTML = batchList(S.B.filter((x) => !q || lk(x.name).includes(q)));
 });
 act("bat-add", async () => {
-  await form(t("Add batch"), `${input("name", { label: t("Batch name") })}${select("cls", clsOptions(), "", { label: t("Class") })}${select("grp", grpOptions(), "", { label: t("Group (Class 9-12)") })}`, {
-    validate: (d) => (!d.name.trim() ? t("Enter the batch name.") : ""),
-    onSave: async (d) => { await db.add("batches", { name: d.name.trim(), cls: d.cls || "", grp: +d.cls >= 9 ? d.grp || "" : "", start: monthStart() }); logAct("Added batch " + d.name); await reloadPeople(); refresh(); },
+  await form(t("Add batch"), `${input("name", { label: t("Batch name (optional)"), hint: t("Left empty, the name is made from the class, group and Boys / Girls.") })}${select("cls", clsOptions(), "", { label: t("Class") })}${select("grp", grpOptions(), "", { label: t("Group (Class 9-12)") })}${select("gd", batchGdOptions(), "", { label: t("For") })}`, {
+    validate: (d) => (!d.name.trim() && !d.cls ? t("Enter the batch name or choose a class.") : ""),
+    onSave: async (d) => {
+      const cls = d.cls || "", grp = +cls >= 9 ? d.grp || "" : "", gd = isGd(d.gd) ? d.gd : "", name = d.name.trim() || batchTitle(cls, grp, gd);
+      await db.add("batches", { name, cls, grp, gd, start: monthStart() });
+      logAct("Added batch " + name); await reloadPeople(); refresh();
+    },
   });
+});
+act("bat-gd", async () => {
+  if (!(await ask(t("For every class that has a batch, make the missing Boys batch and Girls batch. Nobody is moved. New students then go to the right one."), { ok: t("Make batches") }))) return;
+  const n = await ensureGenderBatches();
+  logAct("Made Boys and Girls batches");
+  toast(n ? t("{n} batches made.", { n }) : t("Nothing to add. They already exist."), n ? "ok" : "");
+  refresh();
 });
 act("bat-open", (el) => {
   const b = batchOf(el.dataset.arg);
   if (!b) return;
   const L = S.U.filter((s) => s.bid === b.id).sort((x, y) => cmp(x.name, y.name));
-  modal(`<h3>${esc(b.name)}</h3><p class="mut">${esc(t("Month from {d}", { d: fmtDate(b.start) }))}</p>
-    <div class="list" style="max-height:44vh;overflow:auto">${L.map((s) => row({ av: avatar(s, 34), title: s.name, sub: esc(s.roll || ""), act: "open-user", arg: s.id })).join("") || empty(t("No students yet."), "users")}</div>
-    <div class="row mt">${btn(t("Month start date"), "bat-start", { arg: b.id, sm: true, ic: "calendar" })}${btn(t("Delete batch"), "bat-del", { arg: b.id, sm: true, kind: "bad", ic: "trash" })}</div>
+  modal(`<h3>${esc(b.name)}</h3><div class="row" style="gap:4px;margin:6px 0">${tag(t("{n} students", { n: countIn(b) }), "ok")}${batchTags(b)}${b.cls ? tag(clsLabel(b)) : ""}</div><p class="mut">${esc(t("Month from {d}", { d: fmtDate(b.start) }))}</p>
+    <div class="list" style="max-height:44vh;overflow:auto">${L.map((s) => row({ av: avatar(s, 34), title: s.name, sub: esc([s.roll, s.nick, s.phone].filter(Boolean).join(" · ")), right: s.active === false ? tag(t("Inactive"), "bad") : "", act: "open-user", arg: s.id })).join("") || empty(t("No students yet."), "users")}</div>
+    <div class="row mt">${btn(t("Edit batch"), "bat-edit", { arg: b.id, sm: true, ic: "edit" })}${btn(t("Month start date"), "bat-start", { arg: b.id, sm: true, ic: "calendar" })}${btn(b.off ? t("Reopen batch") : t("Close batch"), "bat-off", { arg: b.id, sm: true, ic: "lock" })}${btn(t("Delete batch"), "bat-del", { arg: b.id, sm: true, kind: "bad", ic: "trash" })}</div>
     <div class="mod-f"><button class="btn" data-act="pu-close">${esc(t("Close"))}</button></div>`);
+});
+act("bat-edit", async (el) => {
+  const b = batchOf(el.dataset.arg);
+  if (!b) return;
+  closeModals();
+  await form(t("Edit batch"), `${input("name", { label: t("Batch name"), value: b.name })}${select("gd", batchGdOptions(), b.gd || "", { label: t("For"), hint: t("Students already in the batch stay in it.") })}`, {
+    validate: (d) => (!d.name.trim() ? t("Enter the batch name.") : ""),
+    onSave: async (d) => { const gd = isGd(d.gd) ? d.gd : ""; await db.upd("batches/" + b.id, { name: d.name.trim(), gd }); b.name = d.name.trim(); b.gd = gd; logAct("Edited batch " + b.name); await reloadPeople(); refresh(); },
+  });
+});
+act("bat-off", async (el) => {
+  const b = batchOf(el.dataset.arg);
+  if (!b) return;
+  const off = !b.off;
+  if (off && !(await ask(t("Close {n}? New registrations will not be added to it. Its students stay.", { n: b.name }), { ok: t("Close batch") }))) return;
+  await db.upd("batches/" + b.id, { off });
+  logAct((off ? "Closed batch " : "Reopened batch ") + b.name);
+  closeModals();
+  await reloadPeople();
+  refresh();
 });
 act("bat-start", async (el) => {
   const b = batchOf(el.dataset.arg);
@@ -337,6 +377,22 @@ act("bat-del", async (el) => {
   await reloadPeople();
   refresh();
 });
+
+// ---------- dashboard: Batch Overview (one card per batch, click = its students) ----------
+const BO_COLOR = { Science: "var(--blue)", Commerce: "var(--gold)", Arts: "var(--violet)" };
+export function batchOverview() {
+  if (!S.B.length) return "";
+  const counts = S.B.map(countIn), total = counts.reduce((a, n) => a + n, 0);
+  const cards = S.B.map((b, i) => {
+    const n = counts[i], st = b.off ? ["bad", t("Closed")] : n ? ["ok", t("Active")] : ["warn", t("No students")];
+    return `<button type="button" class="bo" style="--c:${BO_COLOR[b.grp] || (b.cls && +b.cls < 9 ? "var(--teal)" : "var(--blue)")}" data-act="bat-open" data-arg="${esc(b.id)}">
+      <span class="bo-n">${esc(b.name)}</span>
+      <span class="bo-m">${esc([clsLabel(b), batchGdLabel(b.gd)].filter(Boolean).join(" · ") || "–")}</span>
+      <span class="bo-c"><b>${n}</b><small>${esc(t("Total students"))}</small></span>
+      <span class="bo-s bo-s--${st[0]}">${esc(st[1])}</span></button>`;
+  }).join("");
+  return card(t("Batch Overview"), `<div class="bo-grid">${cards}</div>`, { cls: "bo-card", right: `<span class="row" style="gap:6px">${tag(t("{n} batches", { n: S.B.length }))}${tag(t("{n} students", { n: total }), "ok")}${btn(t("Manage"), "nav", { arg: "batches", sm: true })}</span>` });
+}
 
 // ---------- co-admin panel (admin only) ----------
 page("coadmin", async () => {
@@ -380,3 +436,16 @@ addBN({
   "Co-admins manage students, batches, attendance, exams and results. They never see fees or salary.": "কো-অ্যাডমিন ছাত্র, ব্যাচ, উপস্থিতি, পরীক্ষা ও ফলাফল পরিচালনা করেন। তারা কখনো ফি বা বেতন দেখেন না।",
   "Activity log": "কার্যকলাপ লগ", "No activity yet.": "এখনো কোনো কার্যকলাপ নেই।",
 });
+addBN({
+  "Decides the Boys or the Girls batch.": "ছেলেদের না মেয়েদের ব্যাচ হবে তা ঠিক করে।", "Choose the gender (Male / Female).": "লিঙ্গ বেছে নিন (ছেলে / মেয়ে)।",
+  "Make Boys & Girls batches": "ছেলে ও মেয়েদের ব্যাচ বানান", "Batch name (optional)": "ব্যাচের নাম (ঐচ্ছিক)", "Left empty, the name is made from the class, group and Boys / Girls.": "খালি রাখলে ক্লাস, বিভাগ ও ছেলে/মেয়ে দিয়ে নাম হবে।",
+  "For": "কাদের জন্য", "Enter the batch name or choose a class.": "ব্যাচের নাম দিন অথবা ক্লাস বেছে নিন।",
+  "For every class that has a batch, make the missing Boys batch and Girls batch. Nobody is moved. New students then go to the right one.": "যে ক্লাসের ব্যাচ আছে তার জন্য ছেলেদের ও মেয়েদের ব্যাচ (যেটা নেই) বানানো হবে। কাউকে সরানো হবে না। নতুন শিক্ষার্থী সঠিক ব্যাচে যাবে।",
+  "Make batches": "ব্যাচ বানান", "{n} batches made.": "{n}টি ব্যাচ বানানো হয়েছে।", "Nothing to add. They already exist.": "নতুন কিছু নেই। সব ব্যাচ আগেই আছে।",
+  "Edit batch": "ব্যাচ সম্পাদনা", "Batch name": "ব্যাচের নাম", "Students already in the batch stay in it.": "ব্যাচে যারা আছে তারা সেখানেই থাকবে।", "Closed": "বন্ধ",
+  "Close batch": "ব্যাচ বন্ধ করুন", "Reopen batch": "ব্যাচ আবার খুলুন", "Close {n}? New registrations will not be added to it. Its students stay.": "{n} বন্ধ করবেন? নতুন রেজিস্ট্রেশন এতে যুক্ত হবে না। এর ছাত্রছাত্রীরা থাকবে।",
+});
+addBN({
+  "Batch Overview": "ব্যাচ ওভারভিউ", "Active": "সক্রিয়", "No students": "কোনো ছাত্র নেই", "{n} batches": "{n}টি ব্যাচ", "Manage": "পরিচালনা",
+});
+

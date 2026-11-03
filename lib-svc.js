@@ -2,7 +2,7 @@
 // Pages call these instead of touching the database directly for anything shared.
 import { db, withNewAccount, isEmailInUse, authEmail } from "./lib-db.js";
 import { S, T, t, lk, cmp, num, sleep } from "./lib-core.js";
-import { calcBatch, statRow, rollOf, rollPrefix, counterKey, defaultBatches, findBatch, DEFAULT_FEE } from "./lib-stats.js";
+import { calcBatch, statRow, rollOf, rollPrefix, counterKey, defaultBatches, findBatch, hasBatch, classGroups, batchSpec, isGd, DEFAULT_FEE } from "./lib-stats.js";
 
 export const active = (u) => u.active !== false && u.ap !== false;
 const byBatch = (a, b) => (+a.cls || 99) - (+b.cls || 99) || cmp(a.grp, b.grp) || cmp(a.name, b.name);
@@ -50,16 +50,32 @@ export async function loadCore() {
 }
 export async function reloadPeople() { await loadCore(); }
 
-// Ready-made batches (Class 4-8, and Class 9-12 for each group). Created once by the admin.
+// Ready-made batches (Class 4-8, and Class 9-12 for each group), one for the boys and one for the girls. Created once by the admin.
 export async function ensureDefaultBatches() {
   const have = S.B.length ? S.B : await db.list("batches");
   const ops = [];
   for (const d of defaultBatches()) {
-    if (findBatch(have, d.cls, d.grp)) continue;
+    if (hasBatch(have, d.cls, d.grp, d.gd)) continue;
     const { id, ...x } = d;
     ops.push({ set: ["batches/" + id, { ...x, start: monthStart(), auto: true }] });
   }
   if (ops.length) { await db.batch(ops); await loadCore(); }
+  return ops.length;
+}
+// For an academy that already has batches: make the missing Boys and Girls batch of every class / group that has a batch.
+// Nobody is moved; new registrations then go to the right one. Returns how many batches were made.
+export async function ensureGenderBatches() {
+  const have = S.B.length ? S.B : await db.list("batches");
+  const ops = [];
+  for (const { cls, grp } of classGroups(have)) {
+    for (const gd of ["M", "F"]) {
+      if (hasBatch(have, cls, grp, gd)) continue;
+      const { id, ...x } = batchSpec(cls, grp, gd);
+      ops.push({ set: ["batches/" + id, { ...x, start: monthStart(), auto: true }] });
+    }
+  }
+  if (ops.length) { await db.batch(ops); await loadCore(); }
+  return ops.length;
 }
 export const monthStart = () => T().slice(0, 8) + "01";
 
@@ -101,19 +117,19 @@ export const markSeen = () => { try { localStorage.setItem(seenKey(), Date.now()
 const cache = {};
 export async function batchData(bid, force = false) {
   if (!force && cache[bid]) return cache[bid];
-  const [att, exams, hw] = await Promise.all([db.list("att", ["bid", "==", bid]), db.list("exams", ["bid", "==", bid]), db.list("hw", ["bid", "==", bid])]);
-  return (cache[bid] = { att, exams, hw });
+  const [att, exams, pa] = await Promise.all([db.list("att", ["bid", "==", bid]), db.list("exams", ["bid", "==", bid]), db.list("pa", ["bid", "==", bid])]);
+  return (cache[bid] = { att, exams, pa });
 }
 export const dropBatchCache = (bid) => { if (bid) delete cache[bid]; else for (const k of Object.keys(cache)) delete cache[k]; };
 
 // Recalculate this month's numbers + ranks of a batch and store them in ONE document (bstat/<batch>)
-// that the students read. Pages call this after saving attendance, marks, homework, or batch changes.
+// that the students read. Pages call this after saving attendance, marks, performance, or batch changes.
 export async function recalcBatch(bid) {
   const b = S.B.find((x) => x.id === bid);
   if (!b) return [];
   dropBatchCache(bid);
   const d = await batchData(bid, true);
-  const rows = calcBatch({ students: S.U.filter((s) => s.bid === bid && active(s)), ...d, from: b.start });
+  const rows = calcBatch({ students: S.U.filter((s) => s.bid === bid && active(s)), att: d.att, exams: d.exams, perf: d.pa, from: b.start });
   const map = {};
   rows.forEach((r) => { map[r.id] = statRow(r); });
   await db.set("bstat/" + bid, { bid, from: b.start, t: Date.now(), n: rows.length, rows: map });
@@ -160,9 +176,9 @@ export async function selfRegister(d) {
   let c = 0;
   try { const x = await db.get("cn/" + key); c = (x && x.n) || 0; } catch (e) { /* ignore */ }
   let bid = "";
-  if (st) { try { bid = (findBatch(await db.list("batches"), d.cls, d.grp) || {}).id || ""; } catch (e) { /* ignore */ } }
+  if (st) { try { bid = (findBatch(await db.list("batches"), d.cls, d.grp, d.gd) || {}).id || ""; } catch (e) { /* ignore */ } }
   const base = st
-    ? { role: "student", name: d.name, nick: d.nick || "", gphone: d.gphone || "", gem: d.gem || "", bid, cls: d.cls, school: d.school || "", grp: d.grp || "", phone: d.phone, addr: d.addr || "", email: d.email }
+    ? { role: "student", name: d.name, nick: d.nick || "", gphone: d.gphone || "", gem: d.gem || "", bid, cls: d.cls, school: d.school || "", grp: d.grp || "", ...(isGd(d.gd) ? { gd: d.gd } : {}), phone: d.phone, addr: d.addr || "", email: d.email }
     : { role: "teacher", name: d.name, nick: d.nick || "", subject: d.subject || "", cls: d.cls || "", phone: d.phone, addr: d.addr || "", email: d.email, bids: [] };
   let n = c;
   for (let i = 0; i < 40; i++) {

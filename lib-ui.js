@@ -55,6 +55,9 @@ const IC = {
   list: '<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>',
   inbox: '<path d="M3 13l3-8h12l3 8v6H3z"/><path d="M3 13h5l1 3h6l1-3h5"/>',
   doc: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/>',
+  trend: '<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
+  female: '<circle cx="12" cy="8" r="4"/><path d="M12 12v8M9 17h6"/>',
+  male: '<circle cx="10" cy="14" r="4.5"/><path d="M13.5 10.5L20 4M15 4h5v5"/>',
 };
 export const icon = (n, cls = "") => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n] || IC.info}</svg>`;
 
@@ -133,6 +136,11 @@ export function select(name, options, value = "", { label, hint = "", ...rest } 
 export const clsOptions = () => [["", t("Class")], ...[4, 5, 6, 7, 8, 9, 10, 11, 12].map((c) => [String(c), t("Class {n}", { n: c })])];
 export const grpOptions = (allLabel) => [["", allLabel || t("Group")], ["Science", t("Science")], ["Commerce", t("Commerce")], ["Arts", t("Arts")]];
 export const grpLabel = (g) => (g ? t(g) : "");
+// gender of a person (M / F) and of a batch (Boys / Girls / mixed)
+export const gdOptions = () => [["", t("Gender")], ["M", t("Male")], ["F", t("Female")]];
+export const gdLabel = (g) => (g === "M" ? t("Male") : g === "F" ? t("Female") : "");
+export const batchGdOptions = () => [["", t("Mixed (boys and girls)")], ["M", t("Boys")], ["F", t("Girls")]];
+export const batchGdLabel = (g) => (g === "M" ? t("Boys") : g === "F" ? t("Girls") : "");
 
 // Batch chooser used at the top of most pages. Changing it fires the "pick-batch" handler (app.js) and redraws.
 export function batchPicker() {

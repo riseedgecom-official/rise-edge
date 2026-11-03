@@ -73,7 +73,7 @@ async function sharedFiles() {
   } catch (e) { return []; }
 }
 const shClear = () => { try { return caches.delete("rise-share").catch(() => {}); } catch (e) { return null; } };
-const SHK = [["hw", "Homework", "book"], ["sug", "Suggestion", "file"], ["sol", "Exam solution", "doc"]];
+const SHK = [["sug", "Suggestion", "file"], ["sol", "Exam solution", "doc"]];
 page("share", async () => {
   if (!SH || !SH.files.length) {
     const files = await sharedFiles();
@@ -97,21 +97,19 @@ act("sh-send", async () => {
   const s = SH;
   if (!s || !s.kind || !s.sel.length) return;
   const msg = document.getElementById("sh-msg"), items = s.files.map((x) => ({ name: x.name, blob: x.blob, title: s.files.length === 1 && s.title.trim() ? s.title.trim() : x.name.replace(/\.[^.]+$/, "") }));
-  const total = items.length * s.sel.length, pre = { hw: "New homework: ", sug: KIND.sug.pre, sol: KIND.sol.pre }[s.kind];
+  const total = items.length * s.sel.length, pre = { sug: KIND.sug.pre, sol: KIND.sol.pre }[s.kind];
   if (items.some((x) => x.blob.size > MAX_FILE)) return toast(t("This file is too big (max {n} MB)", { n: Math.round(MAX_FILE / 1048576) }), "bad");
   let k = 0;
   for (const bid of s.sel) {
     for (const x of items) {
       k++;
       const id = await putFile(bid, s.kind, x.title, x.blob, x.name, (i, n) => { if (msg) msg.textContent = t("Sending {k}/{m} (part {i}/{n})… keep the app open", { k, m: total, i, n }); });
-      if (s.kind === "hw") await db.add("hw", { bid, title: x.title, date: T(), D: [], fid: id });
       notify("batch", pre + x.title, bid);
     }
-    if (s.kind === "hw") await recalcBatch(bid);
   }
   await shClear();
   S.bid = s.sel[0];
-  const pg = { hw: "homework", sug: "suggestions", sol: "solutions" }[s.kind];
+  const pg = { sug: "suggestions", sol: "solutions" }[s.kind];
   SH = null;
   toast(t("Sent"), "ok");
   go(pg);
@@ -266,7 +264,7 @@ async function applyRequest(q) {
     for (let d = new Date(q.from + "T00:00:00"), e = new Date((q.to || q.from) + "T00:00:00"); d <= e && ds.length < 31; d.setDate(d.getDate() + 1)) ds.push(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"));
     await db.upd("users/" + q.sid, { lv: uniq([...(u.lv || []), ...ds]) });
   } else if (q.type === "subject") {
-    const old = batchOf(u.bid), nb = old ? findBatch(S.B, old.cls, q.nv) : null, patch = { grp: q.nv };
+    const old = batchOf(u.bid), nb = old ? findBatch(S.B, old.cls, q.nv, u.gd || old.gd) : null, patch = { grp: q.nv };
     if (nb && nb.id !== u.bid) { patch.bid = nb.id; patch.cls = nb.cls || u.cls || ""; }
     await db.upd("users/" + q.sid, patch);
     await reloadPeople();

@@ -53,13 +53,12 @@ const noticeCard = async () => {
 // ---------- admin / co-admin ----------
 async function staffHome() {
   const d = T(), m = nextMonth(d.slice(0, 7), -1), A = S.U.filter(active), fees = canFees();   // m = the month whose fee fell due on the 1st of this month
-  const [docs, P, BF, fp, rq, abs, ranks, pr, mk] = await Promise.all([
+  const [docs, P, BF, fp, rq, ranks, pr, mk] = await Promise.all([
     Promise.all(S.B.map((b) => db.get("att/" + b.id + "_" + d).catch(() => null))),
     fees ? db.list("pay", ["m", "==", m]).catch(() => []) : [],
     fees ? db.list("bf", ["m", "==", m]).catch(() => []) : [],
     db.list("fp", ["st", "==", "new"]).catch(() => []),
     lazy("pages-content.js", "pendingRequests"),
-    lazy("pages-attendance.js", "absentToday"),
     lazy("pages-exams.js", "ranksBox"),
     fees ? lazy("pages-fees.js", "payRequestsCard") : "",
     lazy("pages-marks.js", "pendingMarks"),
@@ -73,6 +72,8 @@ async function staffHome() {
   BF.forEach((x) => { map[x.bid + "_" + x.m] = x.amt; });
   const billed = A.filter((s) => s.bid && (feeStart(s, P) || d.slice(0, 7)) <= m), due = billed.filter((s) => feeFor(s, batchOf(s.bid), m, { INST: S.INST, BF: map }) > paidIn(P, s.id, m)).length;
   const teachers = S.TC.filter(active).length;
+  // fee overview (admin only), batch overview and today's absent students; they reuse what was just read
+  const [fo, bo, abs] = await Promise.all([fees ? lazy("pages-fees.js", "feeOverviewCard", { m, P, BF }) : "", lazy("pages-people.js", "batchOverview"), lazy("pages-attendance.js", "absentToday", docs)]);
   return `${welcome()}${pwNote()}${installCard()}
   <div class="card mt"><div class="rings">${ring(pres + ab ? (pres / (pres + ab)) * 100 : null, t("Attendance today"), "var(--ok)")}${fees ? ring(billed.length ? ((billed.length - due) / billed.length) * 100 : null, t("Fees paid"), "var(--blue)") : ""}</div></div>
   <div class="mt">${tiles([
@@ -85,7 +86,7 @@ async function staffHome() {
   ])}</div>
   ${S.PEND.length || fp.length ? `<div class="mt">${notice(`${S.PEND.length ? `${esc(t("Registrations waiting for approval"))}: <b>${S.PEND.length}</b>. ` : ""}${fp.length ? `${esc(t("Password help requests"))}: <b>${fp.length}</b>. ` : ""}${btn(t("Open"), "nav", { arg: "approvals", sm: true })}`, "warn", "user")}</div>` : ""}
   ${mk ? `<div class="mt">${notice(`${esc(t("Marks waiting for approval"))}: <b>${mk}</b>. ${btn(t("Open"), "nav", { arg: "marks", sm: true })}`, "info")}</div>` : ""}
-  ${pr ? `<div class="mt">${pr}</div>` : ""}${abs ? `<div class="mt">${abs}</div>` : ""}${ranks ? `<div class="mt">${ranks}</div>` : ""}`;
+  ${pr ? `<div class="mt">${pr}</div>` : ""}${fo ? `<div class="mt">${fo}</div>` : ""}${bo ? `<div class="mt">${bo}</div>` : ""}${ranks ? `<div class="mt">${ranks}</div>` : ""}${abs ? `<div class="mt">${abs}</div>` : ""}`;
 }
 
 // ---------- teacher ----------
@@ -114,7 +115,7 @@ async function teacherHome() {
   ])}</div>
   <div class="mt">${card(t("My classes"), S.B.length ? `<div class="list">${S.B.map(rowOf).join("")}</div>` : empty(t("No batch assigned yet."), "layers"))}</div>
   ${cls ? `<div class="mt">${cls}</div>` : ""}${sal ? `<div class="mt">${sal}</div>` : ""}
-  <div class="mt">${quick([["attendance", "calcheck", "Attendance"], ["exams", "clip", "Exams"], ["homework", "book", "Homework"], ["syllabus", "list", "Syllabus"]])}</div>
+  <div class="mt">${quick([["attendance", "calcheck", "Attendance"], ["exams", "clip", "Exams"], ["performance", "trend", "Performance"], ["syllabus", "list", "Syllabus"]])}</div>
   ${ranks ? `<div class="mt">${ranks}</div>` : ""}`;
 }
 act("hm-att", (el) => { S.bid = el.dataset.arg; location.hash = "#/attendance"; });
@@ -123,15 +124,15 @@ act("hm-att", (el) => { S.bid = el.dataset.arg; location.hash = "#/attendance"; 
 async function studentHome() {
   const me = S.me, b = S.B[0] || null;
   if (!me.bid || !b) return `${welcome()}${pwNote()}${installCard()}<div class="mt">${empty(t("You are not in a batch yet. The admin will add you to one."), "layers")}</div>`;
-  const [st, fee, cls, nts, rr] = await Promise.all([getStats(me.bid), lazy("pages-fees.js", "feeSummaryCard"), lazy("pages-attendance.js", "todayClasses"), noticeCard(), lazy("pages-exams.js", "recentResults")]);
+  const [st, fee, cls, nts, rr, pf] = await Promise.all([getStats(me.bid), lazy("pages-fees.js", "feeSummaryCard"), lazy("pages-attendance.js", "todayClasses"), noticeCard(), lazy("pages-exams.js", "recentResults"), lazy("pages-perf.js", "recentPerf")]);
   const r = (st.rows || {})[S.pid] || {}, n = st.n || 0;
   const att = (r.p || 0) + (r.a || 0) ? ((r.p || 0) / ((r.p || 0) + (r.a || 0))) * 100 : null;
   return `${welcome(`${b.name} · ${today()}`)}${pwNote()}${installCard()}
   <div class="card mt"><div class="card-h"><h3>${esc(t("This month"))}</h3>${st.from ? `<span class="mut sm">${esc(t("Counted from {d}.", { d: fmtDate(st.from) }))}</span>` : ""}</div>
-    <div class="rings">${ring(att, t("Attendance"), "var(--ok)")}${ring(r.ex, t("Exam average"), "#6a4cf0")}${ring(r.hw, t("Homework"), "var(--gold)")}</div>
+    <div class="rings">${ring(att, t("Attendance"), "var(--ok)")}${ring(r.ex, t("Exam average"), "#6a4cf0")}${ring(r.pf, t("Performance"), "var(--gold)")}</div>
     <div class="tiles mt">${stat({ ic: "trophy", label: t("Exam rank"), value: r.er ? "#" + r.er : "–", sub: n ? t("of {n} students", { n }) : "", color: "#6a4cf0", ...nav("exams") })}${stat({ ic: "star", label: t("Overall"), value: f1(r.ov), sub: r.or ? t("Rank #{r} of {n}", { r: r.or, n }) : "", color: "var(--blue)", ...nav("reports") })}</div></div>
-  ${rr ? `<div class="mt">${rr}</div>` : ""}${cls ? `<div class="mt">${cls}</div>` : ""}${fee ? `<div class="mt">${fee}</div>` : ""}${nts ? `<div class="mt">${nts}</div>` : ""}
-  <div class="mt">${quick([["homework", "book", "Homework"], ["exams", "clip", "Results"], ["syllabus", "list", "Syllabus"], ["reports", "chart", "Report"], ["requests", "mega", "Requests"], ["idcard", "idcard", "ID card"]])}</div>`;
+  ${rr ? `<div class="mt">${rr}</div>` : ""}${pf ? `<div class="mt">${pf}</div>` : ""}${cls ? `<div class="mt">${cls}</div>` : ""}${fee ? `<div class="mt">${fee}</div>` : ""}${nts ? `<div class="mt">${nts}</div>` : ""}
+  <div class="mt">${quick([["performance", "trend", "Performance"], ["exams", "clip", "Results"], ["syllabus", "list", "Syllabus"], ["reports", "chart", "Report"], ["requests", "mega", "Requests"], ["idcard", "idcard", "ID card"]])}</div>`;
 }
 
 page("dashboard", async () => {

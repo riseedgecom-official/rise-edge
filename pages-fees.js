@@ -5,7 +5,7 @@ import {
   S, esc, t, page, act, onInput, onChange, onSubmit, formData, pageState, refresh, go, canFees, isStudent, isTeacher, instName, T, fmtDate, ago, money, addBN,
   activeStudents, curBatch, n2, num, monthLabel, batchOf,
 } from "./lib-core.js";
-import { icon, avatar, tag, empty, notice, card, row, btn, chips, input, select, batchPicker, ask, askText, form, toast, showDoc, stat, modal, closeModals } from "./lib-ui.js";
+import { icon, avatar, tag, empty, notice, card, row, btn, chips, input, select, batchPicker, ask, askText, form, toast, showDoc, stat, modal, closeModals, donut } from "./lib-ui.js";
 import { notify, saveInst, defaultFee, shrinkImage } from "./lib-svc.js";
 import { feeFor, paidIn, feeStart, feePlan, monthStatus, nextMonth, manualState, manualDue } from "./lib-stats.js";
 
@@ -360,6 +360,84 @@ export async function salaryCard() {
   } catch (e) { return ""; }
 }
 
+// ---------- dashboard: Fee Collection Overview (admin only) ----------
+// One month at a time. Expected = the fee of every student who owes that month, Collected = what was paid for it (a payment
+// above the fee is not counted twice), Pending = what is still open (a part payment leaves the rest pending). It is worked out
+// with the same rules as the Fees page, from the real fee and payment records.
+const FO = () => pageState("fo");
+let FOD = null;   // the month shown now, for the detailed report
+function collect(m, P, BF) {
+  const cx = ctx(bfMap(BF)), today = T(), cur = today.slice(0, 7), rows = [];
+  for (const s of S.U.filter((x) => x.active !== false && x.ap !== false && x.bid)) {
+    const start = feeStart(s, P) || cur, r = monthStatus(s, batchOf(s.bid), m, today, cx, P, start);
+    if (r.state === "none") continue;
+    rows.push({ s, r, got: Math.min(r.paid, r.fee), left: Math.max(0, n2(r.fee - r.paid)) });
+  }
+  const sum = (L, k) => n2(L.reduce((a, x) => a + x[k], 0));
+  const exp = n2(rows.reduce((a, x) => a + x.r.fee, 0)), got = sum(rows, "got"), left = sum(rows, "left");
+  const per = {};
+  rows.forEach((x) => { const b = (per[x.s.bid] = per[x.s.bid] || { b: batchOf(x.s.bid) || { name: "?" }, n: 0, exp: 0, got: 0, left: 0 }); b.n++; b.exp += x.r.fee; b.got += x.got; b.left += x.left; });
+  return { m, rows, exp, got, left, rate: exp > 0 ? (got / exp) * 100 : null, per: Object.values(per).map((b) => ({ ...b, exp: n2(b.exp), got: n2(b.got), left: n2(b.left) })), due: m < cur };
+}
+export async function feeOverviewCard(pre) {
+  if (!canFees()) return "";
+  try {
+    const st = FO(), cur = T().slice(0, 7), m = st.m || nextMonth(cur, -1);
+    let P, BF;
+    if (pre && pre.m === m) ({ P, BF } = pre);
+    else [P, BF] = await Promise.all([db.list("pay", ["m", "==", m]).catch(() => []), db.list("bf", ["m", "==", m]).catch(() => [])]);
+    const d = (FOD = collect(m, P, BF)), pend = d.exp > 0 ? 100 - d.rate : 0;
+    const nav = `<span class="row" style="gap:4px;flex-wrap:nowrap"><button type="button" class="icon-btn" data-act="fo-m" data-arg="-1" aria-label="${esc(t("Earlier month"))}">${icon("back")}</button><b class="nowrap">${esc(monthLabel(m))}</b><button type="button" class="icon-btn" data-act="fo-m" data-arg="1" aria-label="${esc(t("Later month"))}" ${m >= cur ? "disabled" : ""}>${icon("right")}</button></span>`;
+    const body = d.exp > 0
+      ? `<div class="fo-grid"><div class="fo-chart">${donut([{ v: d.got, c: "var(--ok)" }, { v: d.left, c: "var(--bad)" }], Math.round(d.rate) + "%", t("collected"))}</div>
+        <div class="fo-sum"><div class="fo-s fo-s--ok"><span>${icon("check")}${esc(t("Collected"))}</span><b>${esc(money(d.got))}</b><small>${esc(f1c(d.rate))} ${esc(t("of expected"))}</small></div>
+        <div class="fo-s fo-s--bad"><span>${icon("clock")}${esc(t("Pending amount"))}</span><b>${esc(money(d.left))}</b><small>${esc(f1c(pend))} ${esc(t("of expected"))}</small></div></div></div>
+        <div class="fo-tot"><span>${esc(t("Total expected"))}</span><b>${esc(money(d.exp))}</b><span class="mut sm">${esc(t("Collection rate"))}: <b>${esc(f1c(d.rate))}</b></span></div>
+        <div class="fo-leg"><span><i style="background:var(--ok)"></i>${esc(t("Collected"))}</span><span><i style="background:var(--bad)"></i>${esc(t("Pending amount"))}</span>${d.due ? "" : `<span class="warn">${esc(t("This month is not due yet."))}</span>`}</div>`
+      : empty(t("No fees to collect for {m}.", { m: monthLabel(m) }), "wallet");
+    return card(t("Fee Collection Overview"), `${body}<div class="row mt">${btn(t("Detailed report"), "fo-report", { ic: "doc", kind: "pri", sm: true })}${btn(t("Open Fees"), "nav", { arg: "fees", ic: "wallet", sm: true })}</div>`, { right: nav, cls: "fo" });
+  } catch (e) { console.warn(e); return ""; }
+}
+const f1c = (v) => (v == null ? "–" : Math.round(v * 10) / 10 + "%");
+act("fo-m", (el) => {
+  const st = FO(), cur = T().slice(0, 7), m = nextMonth(st.m || nextMonth(cur, -1), +el.dataset.arg);
+  if (m > cur) return;
+  st.m = m; refresh();
+});
+// every student of the month + the extra fees, as a printable table / CSV
+act("fo-report", async () => {
+  const d = FOD;
+  if (!d) return;
+  const sf = await db.list("sf").catch(() => []), ex = sf.map((f) => ({ f, ...manualState(f) })), exOpen = ex.filter((x) => x.left > 0).sort((a, b) => b.left - a.left);
+  const exSum = (k) => n2(ex.reduce((a, x) => a + (k === "amt" ? +x.f.amt || 0 : x[k]), 0));
+  const open = d.rows.filter((x) => x.left > 0).sort((a, b) => b.left - a.left);
+  const rate = (a, b) => (b > 0 ? f1c((a / b) * 100) : "–");
+  const TD = "padding:6px 6px;border-top:1px solid var(--line)";
+  modal(`<h3>${esc(t("Fee collection report"))}: ${esc(monthLabel(d.m))}</h3>
+    <div class="tiles mt"><div class="stat" style="--c:var(--blue)"><span class="stat-top">${esc(t("Expected"))}</span><span class="stat-v">${esc(money(d.exp))}</span></div><div class="stat" style="--c:var(--ok)"><span class="stat-top">${esc(t("Collected"))}</span><span class="stat-v">${esc(money(d.got))}</span></div><div class="stat" style="--c:var(--bad)"><span class="stat-top">${esc(t("Pending amount"))}</span><span class="stat-v">${esc(money(d.left))}</span></div><div class="stat" style="--c:var(--gold-ink)"><span class="stat-top">${esc(t("Collection rate"))}</span><span class="stat-v">${esc(f1c(d.rate))}</span></div></div>
+    <div style="max-height:52vh;overflow:auto">
+    <h4 class="mt">${esc(t("By batch"))}</h4>
+    ${d.per.length ? `<div class="tw"><table class="tbl"><tr><th>${esc(t("Batch"))}</th><th class="n">${esc(t("Students"))}</th><th class="n">${esc(t("Expected"))}</th><th class="n">${esc(t("Collected"))}</th><th class="n">${esc(t("Due"))}</th><th class="n">%</th></tr>${d.per.map((b) => `<tr><td>${esc(b.b.name)}</td><td class="n">${b.n}</td><td class="n">${esc(money(b.exp))}</td><td class="n">${esc(money(b.got))}</td><td class="n">${esc(money(b.left))}</td><td class="n">${esc(rate(b.got, b.exp))}</td></tr>`).join("")}</table></div>` : empty(t("Nothing to show."), "wallet")}
+    <h4 class="mt">${esc(t("Students with fees pending"))} (${open.length})</h4>
+    ${open.length ? `<div class="list">${open.map(({ s, r, left }) => row({ av: avatar(s, 34), title: s.name, sub: esc([batchOf(s.bid) ? batchOf(s.bid).name : "", s.roll].filter(Boolean).join(" · ") + " · " + money(r.paid) + " / " + money(r.fee)), right: `<b class="${r.state === "partial" ? "warn" : "bad"}">${esc(money(left))}</b>`, act: "open-user", arg: s.id })).join("")}</div>` : empty(t("Everybody has paid."), "check")}
+    ${ex.length ? `<h4 class="mt">${esc(t("Extra fees (all months)"))}</h4><p class="mut sm">${esc(t("Expected"))} ${esc(money(exSum("amt")))} · ${esc(t("Collected"))} ${esc(money(exSum("paid")))} · ${esc(t("Pending amount"))} <b class="${exSum("left") ? "bad" : "ok"}">${esc(money(exSum("left")))}</b></p>
+      ${exOpen.length ? `<div class="list">${exOpen.slice(0, 40).map(({ f, left }) => { const s = S.U.find((u) => u.id === f.sid); return row({ av: s ? avatar(s, 30) : "", title: s ? s.name : "?", sub: esc(f.note || ""), right: `<b class="bad">${esc(money(left))}</b>`, act: s ? "open-user" : undefined, arg: f.sid }); }).join("")}</div>` : ""}` : ""}</div>
+    <div class="row mt">${btn(t("Download CSV"), "fo-csv", { sm: true, ic: "download" })}</div>
+    <div class="mod-f"><button class="btn" data-act="pu-close">${esc(t("Close"))}</button></div>`);
+});
+act("fo-csv", () => {
+  const d = FOD;
+  if (!d) return;
+  const q = (v) => '"' + String(v ?? "").replace(/"/g, '""') + '"';
+  const lines = [["Batch", "Student", "Roll", "Month", "Fee", "Paid", "Pending", "Status"].map(q).join(",")];
+  d.rows.slice().sort((a, b) => String(batchOf(a.s.bid).name).localeCompare(String(batchOf(b.s.bid).name)) || String(a.s.name).localeCompare(String(b.s.name))).forEach(({ s, r, left }) => lines.push([batchOf(s.bid).name, s.name, s.roll, d.m, r.fee, r.paid, left, r.state].map(q).join(",")));
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" }));
+  a.download = "fees-" + d.m + ".csv";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+});
+
 addBN({
   "Only the admin can open Fees.": "শুধু অ্যাডমিন ফি খুলতে পারেন।", "Student fees": "ছাত্রদের ফি", "Add fee": "ফি যোগ করুন", "Payment": "পেমেন্ট", "Paid": "পরিশোধিত", "Waiting for approval": "অনুমোদনের অপেক্ষায়", "Partial": "আংশিক", "Due": "বাকি",
   "Payment requests": "পেমেন্টের অনুরোধ", "Roll {r}": "রোল {r}", "Online": "অনলাইন", "Cash": "ক্যাশ", "Screenshot": "স্ক্রিনশট", "Approve": "অনুমোদন", "Reject": "বাতিল", "Month": "মাস", "Student payment": "ছাত্রের পেমেন্ট", "Student": "ছাত্র",
@@ -390,3 +468,10 @@ addBN({
   "Fee history": "ফি-র ইতিহাস", "Unpaid fees: {m}": "{m} এর বাকি ফি", "Leave empty to use the month the student registered. No fee is made for earlier months.": "খালি রাখলে ছাত্র যে মাসে রেজিস্ট্রেশন করেছে সেটি ধরা হবে। আগের মাসের কোনো ফি তৈরি হয় না।",
   "Not found": "পাওয়া যায়নি", "Deleted": "মুছে ফেলা হয়েছে",
 });
+addBN({
+  "Fee Collection Overview": "ফি সংগ্রহের সারসংক্ষেপ", "Earlier month": "আগের মাস", "Later month": "পরের মাস", "collected": "আদায়", "Pending amount": "বাকি টাকা", "of expected": "প্রত্যাশিত থেকে",
+  "Total expected": "মোট প্রত্যাশিত", "Collection rate": "আদায়ের হার", "This month is not due yet.": "এই মাসের ফি এখনো দেয় হয়নি।", "No fees to collect for {m}.": "{m} এ আদায়ের কোনো ফি নেই।",
+  "Detailed report": "বিস্তারিত রিপোর্ট", "Open Fees": "ফি পাতা খুলুন", "Fee collection report": "ফি আদায় রিপোর্ট", "Expected": "প্রত্যাশিত", "By batch": "ব্যাচ অনুযায়ী", "Nothing to show.": "দেখানোর কিছু নেই।",
+  "Students with fees pending": "যাদের ফি বাকি", "Everybody has paid.": "সবাই পরিশোধ করেছে।", "Extra fees (all months)": "অতিরিক্ত ফি (সব মাস)", "Download CSV": "CSV ডাউনলোড",
+});
+
