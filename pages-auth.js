@@ -4,22 +4,30 @@ import { db, signIn, sendReset, changePassword, withNewAccount, isEmailInUse, au
 import { S, $, esc, t, act, onSubmit, onChange, formData, lk, isEmail, addBN, instName } from "./lib-core.js";
 import { icon, input, select, notice, toast, form, chips, clsOptions, grpOptions, gdOptions, gdLabel } from "./lib-ui.js";
 import { loadInst, selfRegister, sendMail } from "./lib-svc.js";
+import { mascotHtml, mascot, idLooksRight, armCelebration, disarmCelebration } from "./lib-mascot.js";
 
 const $app = () => document.getElementById("app");
 let redraw = () => {};
 export const authRedraw = () => redraw();
 
 const langSw = () => `<div class="lang"><div class="langsw" role="group" aria-label="Language"><button class="${S.lang === "en" ? "on" : ""}" data-act="lang" data-arg="en">EN</button><button class="${S.lang === "bn" ? "on" : ""}" data-act="lang" data-arg="bn">বাংলা</button></div></div>`;
-const art = () => `<div class="auth-art"><img src="logo.jpg" alt=""><h1>${esc(instName())}</h1><p>${esc(t("Student, teacher and admin portal"))}</p></div>`;
-const frame = (inner) => `<div class="auth">${langSw()}${art()}<div class="auth-box">${inner}</div></div>`;
+// the face on the left (on a phone: above the form) reacts to what the person types, see lib-mascot.js
+const art = (mood) => `<div class="auth-art"><div class="auth-id"><img src="logo.jpg" alt=""><h1>${esc(instName())}</h1><p>${esc(t("Student, teacher and admin portal"))}</p></div>${mascotHtml(mood)}</div>`;
+const frame = (inner, mood = "idle", long = false) => `<div class="auth${long ? " auth--long" : ""}">${langSw()}${art(mood)}<div class="auth-box">${inner}</div></div>`;
 const pwField = (name, label, auto = "current-password") =>
   `<label class="fld"><span>${esc(label)}</span><div class="pw"><input type="password" name="${name}" autocomplete="${auto}" required><button type="button" class="btn btn--sm" data-act="pw-toggle" data-free="1">${esc(t("Show"))}</button></div></label>`;
 act("pw-toggle", (el) => {
   const i = el.parentElement.querySelector("input");
   i.type = i.type === "password" ? "text" : "password";
   el.textContent = i.type === "password" ? t("Show") : t("Hide");
+  mascot(i.type === "password" ? "hide" : "watch");      // the hands cover the eyes again when the password is hidden
 });
-const err = (m) => { const e = $("#au-err"); if (e) { e.textContent = m || ""; e.hidden = !m; } };
+// a refused form: the message, and the face gets angry for a moment
+const err = (m) => {
+  const e = $("#au-err");
+  if (e) { e.textContent = m || ""; e.hidden = !m; }
+  if (m) { mascot("angry", 2600); if (e && e.scrollIntoView) e.scrollIntoView({ block: "center", behavior: "smooth" }); }
+};
 
 // ---------- not configured ----------
 export function renderNotConfigured() {
@@ -56,24 +64,29 @@ onSubmit("login", async (el) => {
   const key = lk(f.u);
   if (!key || !f.p) return err(t("Enter your roll number (or email) and password."));
   err("");
-  let emails = [];
+  mascot("think");                                  // checking...
+  let emails = [], unknownId = false;
   if (key.includes("@")) emails = [key];
   else {
-    try { const l = await db.get("login/" + key); if (l) emails = l.es || (l.e ? [l.e] : []); } catch (e) { /* ignore */ }
+    try { const l = await db.get("login/" + key); if (l) emails = l.es || (l.e ? [l.e] : []); else unknownId = true; } catch (e) { /* ignore */ }
     if (!emails.length) emails = [authEmail(key)];
   }
+  armCelebration();                                 // app.js shows the happy picture for a moment when the user arrives
   for (const e of emails) {
-    try { await signIn(e, f.p); return; }
+    try { await signIn(e, f.p); mascot("happy"); return; }
     catch (x) {
-      if (x && x.code === "auth/too-many-requests") return err(dbError(x));
-      if (x && /network|api-key|operation-not-allowed|configuration/i.test(x.code || "")) return err(dbError(x));
+      if (x && (x.code === "auth/too-many-requests" || /network|api-key|operation-not-allowed|configuration/i.test(x.code || ""))) { disarmCelebration(); err(dbError(x)); return mascot("sad", 2600); }
     }
   }
+  disarmCelebration();
   err(t("Wrong roll number / email or password. Forgot it? Use \"Forgot password?\"."));
+  // an ID that exists but was refused: sad. A roll number nobody has: angry (wrong ID). Something that is not an ID at all: confused.
+  mascot(!unknownId ? "sad" : idLooksRight(f.u) ? "angry" : "confused", 2600);
 });
 
 // ---------- forgot password ----------
 act("fp-open", async () => {
+  mascot("confused", 5000);
   await form(t("Forgot password?"), `${input("who", { label: t("Roll number or email"), autocapitalize: "none" })}${input("name", { label: t("Your name") })}${input("phone", { label: t("Phone number"), type: "tel", inputmode: "tel" })}`, {
     ok: t("Send request"),
     hint: t("Students and teachers: the admin will give you a new password. Admin: a reset link is sent to your email."),
@@ -163,7 +176,7 @@ async function renderRegister(review = false) {
     ${pwField("pw2", t("Repeat password"), "new-password")}
     <button type="submit" class="btn btn--pri btn--block">${esc(t("Review"))}</button>
     <button type="button" class="btn btn--ghost btn--sm" data-act="back-login">${esc(t("Back to sign in"))}</button>
-  </form>`);
+  </form>`, "idle", true);
 }
 const keep = () => { const f = $("form[data-submit]"); if (f) REG = { ...REG, ...formData(f) }; };
 act("reg-role", (el) => { keep(); REG.role = el.dataset.arg; renderRegister(); });
@@ -215,7 +228,7 @@ act("reg-send", async () => {
   $app().innerHTML = frame(`<div class="card stack tc"><div class="medal" style="margin:0 auto">${icon("check")}</div><h2>${esc(t("Registered!"))}</h2>
     <p>${esc(t("Your login ID is"))}</p><div class="b" style="font-size:26px;letter-spacing:.02em;user-select:all">${esc(out.roll)}</div>
     <p class="mut">${esc(t("Write it down. Sign in with this ID and the password you chose. You will see everything after the admin approves you."))}</p>
-    <button class="btn btn--pri btn--block" data-act="back-login">${esc(t("Go to sign in"))}</button></div>`);
+    <button class="btn btn--pri btn--block" data-act="back-login">${esc(t("Go to sign in"))}</button></div>`, "happy");
 });
 
 // ---------- forced new password (temporary password from the admin) ----------

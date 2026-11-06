@@ -326,25 +326,58 @@ table.tbl{width:100%;border-collapse:collapse;font-size:14px}
 }
 
 /* ---------- auth pages ---------- */
-.auth{min-height:100vh;min-height:100dvh;display:grid;grid-template-columns:1fr}
-.auth-art{background:radial-gradient(900px 500px at 30% 0%,#12408f 0,#07122c 62%);color:#fff;padding:26px 22px 30px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px}
-.auth-art img{width:104px;height:104px;border-radius:50%;box-shadow:0 0 0 3px #1d4fb8,0 0 34px rgba(56,182,255,.6)}
-.auth-art h1{font-size:24px;margin-top:10px}
-.auth-art p{color:#a9c4ff;margin:0;font-size:14px}
+/* phone: a blue band on top (name on the left, the face on the right, standing on the band's edge), the form below */
+.auth{min-height:100vh;min-height:100dvh;display:grid;grid-template-columns:1fr;grid-template-rows:auto 1fr;position:relative}
+.auth-art{background:radial-gradient(900px 500px at 30% 0%,#12408f 0,#07122c 62%);color:#fff;padding:58px 16px 0 18px;display:grid;grid-template-columns:1fr auto;align-items:end;gap:0 6px;overflow:hidden}
+.auth-id{align-self:center;padding-bottom:16px;min-width:0}
+.auth-id img{width:58px;height:58px;border-radius:50%;box-shadow:0 0 0 3px #1d4fb8,0 0 24px rgba(56,182,255,.6)}
+.auth-art h1{font-size:21px;margin-top:10px;line-height:1.15}
+.auth-art p{color:#a9c4ff;margin:4px 0 0;font-size:13px}
 .auth-art .stats{display:none}
 .auth-box{padding:20px 16px 40px;max-width:520px;width:100%;margin:0 auto}
 .auth-box .card{padding:20px 18px}
 @media(min-width:900px){
-  .auth{grid-template-columns:minmax(340px,42%) 1fr}
-  .auth-art{justify-content:center;padding:40px}
-  .auth-art img{width:150px;height:150px}
-  .auth-art h1{font-size:32px}
+  .auth{grid-template-columns:minmax(360px,42%) 1fr;grid-template-rows:1fr}
+  .auth-art{display:flex;flex-direction:column;justify-content:space-between;align-items:center;text-align:center;padding:48px 40px 0;position:sticky;top:0;height:100vh;height:100dvh}
+  .auth-id{align-self:auto;padding:0}
+  .auth-id img{width:112px;height:112px}
+  .auth-art h1{font-size:32px;margin-top:14px}
+  .auth-art p{font-size:15px;margin-top:6px}
   .auth-box{align-self:center;padding:30px}
 }
-.lang{position:absolute;top:12px;right:12px}
+/* the registration form is long: on a phone the face stays at the top while the form scrolls */
+@media(max-width:899px){
+  .auth--long .auth-art{position:sticky;top:0;z-index:6;padding-top:8px}
+  .auth--long .auth-id img{width:40px;height:40px;box-shadow:0 0 0 2px #1d4fb8}
+  .auth--long .auth-art h1{font-size:16px;margin-top:6px}
+  .auth--long .auth-art p{display:none}
+  .auth--long .auth-id{padding-bottom:10px}
+  .auth--long .mc{width:88px;margin-bottom:8px}
+}
+.lang{position:absolute;top:12px;right:12px;z-index:7}
+.auth--long .lang{position:absolute;top:8px;right:auto;left:62px;z-index:7}
+@media(min-width:900px){.auth--long .lang{position:absolute;top:12px;left:auto;right:12px}}
 .pw{position:relative}
 .pw .btn{position:absolute;right:4px;top:3px;min-height:38px;padding:4px 10px}
 .pw input{padding-right:70px}
+
+/* ---------- the avatar (lib-mascot.js): one picture per state, stacked; the one for the state shows ---------- */
+/* it floats and rocks all the time (mc-float); some states add their own move first (shake, hop, sag) and then go back to floating */
+.mc{position:relative;width:132px;aspect-ratio:1/1;margin-bottom:12px;border-radius:16px;overflow:hidden;background:#f1f7fe;user-select:none;pointer-events:none;box-shadow:0 0 0 3px #1d4fb8,0 8px 26px rgba(0,0,0,.35),0 0 30px rgba(56,182,255,.35);animation:mc-float 3s ease-in-out infinite}
+.mc-i{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 0;opacity:0;transition:opacity .16s}
+.mc-idle{object-fit:contain;object-position:50% 50%;background:#f1f7fe}
+@media(min-width:900px){.mc-idle{transform:scale(1.22)}}      /* the round profile picture: all of it, centred */
+.mc[data-im=idle] .mc-idle,.mc[data-im=think] .mc-think,.mc[data-im=happy] .mc-happy,.mc[data-im=hide] .mc-hide,.mc[data-im=angry] .mc-angry,.mc[data-im=sad] .mc-sad,.mc[data-im=confused] .mc-confused{opacity:1}
+@media(min-width:900px){.mc{width:min(300px,100%,max(150px,calc((100vh - 340px) * 2 / 3)));width:min(300px,100%,max(150px,calc((100dvh - 340px) * 2 / 3)));aspect-ratio:2/3;margin-bottom:52px;border-radius:22px;box-shadow:0 0 0 4px #1d4fb8,0 14px 40px rgba(0,0,0,.4),0 0 50px rgba(56,182,255,.4)}}
+.mc[data-mc=angry]{animation:mc-shake .1s linear 7,mc-float 3s .7s ease-in-out infinite}
+.mc[data-mc=sad]{animation:mc-sag .5s ease-out,mc-float 3s .5s ease-in-out infinite}
+.mc[data-mc=happy]{animation:mc-hop .45s ease-out 2,mc-float 3s .9s ease-in-out infinite}
+.mc[data-mc=think],.mc[data-mc=confused]{animation:mc-sway 2.6s ease-in-out infinite}
+@keyframes mc-float{0%,50%,100%{transform:none}25%{transform:translateY(-7px) rotate(2deg)}75%{transform:translateY(-4px) rotate(-2deg)}}
+@keyframes mc-shake{25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+@keyframes mc-hop{40%{transform:translateY(-10px)}}
+@keyframes mc-sag{0%{transform:translateY(-8px)}100%{transform:none}}
+@keyframes mc-sway{0%,100%{transform:rotate(-1.5deg)}50%{transform:rotate(1.5deg)}}
 
 /* ---------- ID card ---------- */
 .idwrap{display:flex;gap:18px;flex-wrap:wrap;justify-content:center;padding:6px 0}

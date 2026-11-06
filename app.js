@@ -1,6 +1,7 @@
 // Rise Edge Academy - app start, signed-in shell (menu, top bar, tab bar) and page router.
 // Pages live in pages-*.js and register themselves with page(name, render).
 import { configured, db, onAuth, signOutNow, dbError } from "./lib-db.js";
+import { celebration } from "./lib-mascot.js";
 import {
   S, $, $$, esc, t, act, onChange, onInput, startEvents, setErrorSink, initLang, setLang, go, parseHash,
   PAGES, setRefresher, isStaff, isAdmin, isTeacher, isStudent, instName, lk,
@@ -180,6 +181,7 @@ function registerActions() {
 let started = 0;
 async function start(u) {
   const my = ++started;
+  if (u) { await celebration(); if (my !== started) return; }      // a login from the sign-in screen: the avatar is happy for a moment first
   if (!u) {
     S.me = null; S.pid = null; S.B = []; S.U = []; S.TC = []; S.PEND = []; S.bid = null; S.unseen = 0; lastPage = "";
     document.body.classList.remove("menu-open");
