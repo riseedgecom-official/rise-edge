@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#07122c">
+<title>ID card · Rise Edge Academy</title>
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anek+Bangla:wght@400;600;800&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#f3f7ff;--mute:#a9c4ff;--navy:#07122c;--navy2:#0d2a6b;--blue:#1469e8;--gold:#f2b01e;--gold2:#ffd36b;--line:rgba(255,255,255,.14);color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{min-height:100vh;min-height:100dvh;background:radial-gradient(900px 520px at 50% -8%,#1650c4 0,#0a1f55 38%,var(--navy) 74%) no-repeat,var(--navy);color:var(--ink);font:400 16px/1.5 'Bricolage Grotesque','Anek Bangla',system-ui,-apple-system,'Segoe UI',sans-serif;display:flex;flex-direction:column;align-items:center;padding:28px 16px calc(24px + env(safe-area-inset-bottom))}
+:lang(bn){font-family:'Anek Bangla','Bricolage Grotesque',system-ui,sans-serif;line-height:1.6}
+:lang(bn) dt{font-size:16px}:lang(bn) .pill{font-size:15px}:lang(bn) .note{font-size:15px}
+main{width:100%;max-width:420px;display:flex;flex-direction:column;align-items:center;text-align:center;flex:1}
+.logo{width:84px;height:84px;border-radius:50%;box-shadow:0 0 0 3px #1d4fb8,0 0 34px rgba(56,182,255,.55)}
+.brand{margin:14px 0 0;font-size:20px;font-weight:800;letter-spacing:.01em}
+.pill{margin-top:10px;padding:6px 18px;border-radius:99px;background:var(--gold);color:#241800;font-size:13px;font-weight:800}
+/* the card: the same navy panel and gold corners as the printed card */
+.card{position:relative;width:100%;margin-top:20px;padding:26px 20px 18px;border-radius:18px;background:linear-gradient(160deg,#0a2a6b 0,#08183f 62%,#060f2b);box-shadow:0 0 0 2px #2f86ff,0 18px 44px rgba(0,0,0,.45)}
+.card::before{content:"";position:absolute;inset:6px;border-radius:13px;border:1px solid rgba(242,176,30,.6);pointer-events:none}
+.corner{position:absolute;width:30px;height:30px;border:5px solid var(--gold);pointer-events:none}
+.corner.tl{top:-2px;left:-2px;border-right:0;border-bottom:0;border-radius:18px 0 0 0}
+.corner.tr{top:-2px;right:-2px;border-left:0;border-bottom:0;border-radius:0 18px 0 0}
+.corner.bl{bottom:-2px;left:-2px;border-right:0;border-top:0;border-radius:0 0 0 18px}
+.corner.br{bottom:-2px;right:-2px;border-left:0;border-top:0;border-radius:0 0 18px 0}
+.hex{width:86px;height:98px;margin:0 auto;display:grid;place-items:center;font-size:40px;font-weight:800;color:var(--gold2);background:linear-gradient(160deg,#1b55c9,#0b2a73);clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%)}
+.hex-w{width:92px;height:104px;margin:0 auto;display:grid;place-items:center;background:var(--gold);clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%)}
+.hex-w .hex{width:86px;height:98px}
+.name{margin:14px 0 2px;font-size:30px;line-height:1.15;font-weight:800;overflow-wrap:anywhere}
+.id{display:inline-block;margin-top:4px;padding:3px 12px;border-radius:8px;background:rgba(242,176,30,.14);color:var(--gold2);font-size:17px;font-weight:800;letter-spacing:.04em;font-variant-numeric:tabular-nums}
+dl{margin:18px 0 0;text-align:left}
+dl div{display:flex;justify-content:space-between;gap:14px;padding:11px 4px;border-top:1px solid var(--line)}
+dt{color:var(--mute);font-size:14px}
+dd{margin:0;font-size:17px;font-weight:600;text-align:right;overflow-wrap:anywhere}
+.note{margin:18px 4px 0;color:var(--mute);font-size:14px}
+.acts{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px;width:100%}
+.btn{flex:1 1 150px;min-height:48px;display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border-radius:12px;border:2px solid var(--gold);color:var(--gold2);font:inherit;font-weight:800;text-decoration:none;background:transparent}
+.btn.pri{background:var(--gold);color:#241800;box-shadow:3px 3px 0 #8a5d00}
+.btn:focus-visible,.lg button:focus-visible{outline:3px solid #fff;outline-offset:2px}
+.bad .hex-w{background:#e0243f}
+.bad .name{font-size:24px}
+footer{margin-top:26px;width:100%;max-width:420px;display:flex;justify-content:space-between;align-items:center;gap:12px;color:var(--mute);font-size:13px}
+.lg{display:inline-flex;border:1px solid var(--line);border-radius:99px;overflow:hidden}
+.lg button{font:inherit;font-size:13px;font-weight:600;min-height:34px;padding:0 12px;border:0;background:transparent;color:var(--mute);cursor:pointer}
+.lg button[aria-pressed=true]{background:var(--ink);color:#08183f}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+  <img class="logo" src="logo.jpg" alt="">
+  <p class="brand" id="brand">Rise Edge Academy</p>
+  <div class="pill" id="pill"></div>
+  <section class="card" id="card" aria-live="polite">
+    <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+    <div class="hex-w"><div class="hex" id="ini"></div></div>
+    <h1 class="name" id="name"></h1>
+    <div class="id" id="rid"></div>
+    <dl id="rows"></dl>
+  </section>
+  <p class="note" id="note"></p>
+  <div class="acts"><a class="btn pri" id="call" href="tel:+8801771625085"></a><a class="btn" id="portal" href="portal.html"></a></div>
+</main>
+<footer><span id="foot">Rise Edge Academy · +880 1771-625085</span><span class="lg" role="group" aria-label="Language"><button type="button" data-l="en">EN</button><button type="button" data-l="bn">বাংলা</button></span></footer>
+<noscript><p class="note">Please turn on JavaScript to see this ID card.</p></noscript>
+<script type="module">
+import { readCard } from "./lib-idq.js";
+// Edit the academy name and phone here if they change (this page does not read the app's settings).
+const ACADEMY = "Rise Edge Academy", PHONE = "+880 1771-625085", TEL = "+8801771625085";
+const T = {
+  en: { S: "Student ID card", T: "Teacher ID card", bad: "This QR could not be read", cls: "Class", batch: "Batch", subj: "Subject", ses: "Session", id: "ID",
+        note: "This page shows what is printed on the ID card. If something looks wrong, call the academy.", badNote: "It may be damaged or it is not an ID card of this academy. Please call the academy.", call: "Call the academy", portal: "Open the portal" },
+  bn: { S: "ছাত্র আইডি কার্ড", T: "শিক্ষক আইডি কার্ড", bad: "এই QR পড়া যায়নি", cls: "শ্রেণি", batch: "ব্যাচ", subj: "বিষয়", ses: "সেশন", id: "আইডি",
+        note: "এই পাতায় আইডি কার্ডে ছাপা তথ্যই দেখানো হয়েছে। কিছু ঠিক না লাগলে একাডেমিতে ফোন করুন।", badNote: "QR ক্ষতিগ্রস্ত হতে পারে, বা এটি এই একাডেমির আইডি কার্ড নয়। অনুগ্রহ করে একাডেমিতে ফোন করুন।", call: "একাডেমিতে ফোন করুন", portal: "পোর্টাল খুলুন" },
+};
+const $ = (id) => document.getElementById(id);
+const card = readCard(new URLSearchParams(location.search).get("d") || "");
+let lang = "en";
+try { lang = localStorage.getItem("rea_lang") === "bn" ? "bn" : "en"; } catch (e) { /* private mode */ }
+
+function draw() {
+  const L = T[lang];
+  document.documentElement.lang = lang;
+  document.querySelectorAll(".lg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.l === lang)));
+  $("call").textContent = L.call; $("portal").textContent = L.portal;
+  $("foot").textContent = ACADEMY + " · " + PHONE;
+  $("call").href = "tel:" + TEL;
+  $("card").classList.toggle("bad", !card);
+  if (!card) {
+    $("pill").textContent = L.bad; $("ini").textContent = "!"; $("name").textContent = L.bad; $("rid").hidden = true; $("rows").innerHTML = ""; $("note").textContent = L.badNote;
+    document.title = L.bad + " · " + ACADEMY;
+    return;
+  }
+  const st = card.k === "S", rows = st ? [[L.cls, card.a], [L.batch, card.b], [L.ses, card.y]] : [[L.subj, card.a], [L.ses, card.y]];
+  $("pill").textContent = L[card.k];
+  $("ini").textContent = [...(card.name || card.id)][0] || "?";
+  $("name").textContent = card.name || card.id;
+  $("rid").hidden = !card.name; $("rid").textContent = card.id;
+  $("rows").replaceChildren(...rows.filter((r) => r[1]).map(([k, v]) => { const d = document.createElement("div"), a = document.createElement("dt"), b = document.createElement("dd"); a.textContent = k; b.textContent = v; d.append(a, b); return d; }));
+  $("note").textContent = L.note;
+  document.title = (card.name || card.id) + " · " + L[card.k] + " · " + ACADEMY;
+}
+document.querySelectorAll(".lg button").forEach((b) => b.addEventListener("click", () => { lang = b.dataset.l; try { localStorage.setItem("rea_lang", lang); } catch (e) { /* ignore */ } draw(); }));
+draw();
+</script>
+</body>
+</html>

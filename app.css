@@ -394,6 +394,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:14px}
 .idc-photo img{width:100%;height:100%;object-fit:cover}
 .idc-qr{width:112px;height:112px;border:2px solid #1469e8;border-radius:8px;padding:4px;background:#fff;display:grid;place-items:center;box-shadow:0 4px 10px rgba(10,22,54,.18)}
 .idc-qr img,.idc-qr svg,.idc-qr canvas{width:100%;height:100%}
+.idc-scan{margin-top:-5px;font-size:9.5px;font-weight:800;color:#0a2a6b;text-align:center;line-height:1.1}
 .idc-r{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
 .idc-f{border-left:3px solid #f2b01e;border-bottom:1px solid rgba(20,105,232,.2);padding:0 0 4px 8px}
 .idc-f small{display:block;font-size:9.5px;color:#1469e8;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
