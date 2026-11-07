@@ -50,7 +50,8 @@ async function studentsTab() {
     <div class="list">${lines.map(({ s, r, unset }) => {
     const x = r.state === "none" ? ["", unset ? t("Set first fee month") : t("Not registered yet")] : stateOf(r);
     const sub = r.state === "none" ? (unset ? t("The first fee month is not known. Open the student and set it.") : t("No fee for this month")) : `${money(r.paid)} / ${money(r.fee)}${r.state === "soon" ? " · " + t("Due from {d}", { d: fmtDate(r.dueOn) }) : ""}`;
-    return row({ av: avatar(s, 36), title: s.name, sub, right: `${r.paid > 0 ? btn(t("Receipt"), "fe-rcpt", { arg: s.id, sm: true, ic: "doc" }) : ""}<b class="${x[0] || (unset ? "warn" : "mut")}">${esc(x[1])}</b>`, act: "open-user", arg: s.id });
+    const word = r.paid > 0 && r.state !== "none" ? `<button type="button" class="fe-st fe-st--${x[0] === "ok" ? "ok" : "warn"}" data-act="fe-st" data-arg="${esc(s.id + "|" + st.m + "|")}">${esc(x[1])}${icon("down")}</button>` : `<b class="${x[0] || (unset ? "warn" : "mut")}">${esc(x[1])}</b>`;
+    return row({ av: avatar(s, 36), title: s.name, sub, right: `${r.paid > 0 ? btn(t("Receipt"), "fe-rcpt", { arg: s.id, sm: true, ic: "doc" }) : ""}${word}`, act: "open-user", arg: s.id });
   }).join("") || empty(t("No students."), "users")}</div></div>` : ""}`;
 }
 onChange("fe-month", (el) => { if (el.value) { F().m = el.value; refresh(); } });
@@ -390,8 +391,8 @@ export async function feeOverviewCard(pre) {
     const nav = `<span class="row" style="gap:4px;flex-wrap:nowrap"><button type="button" class="icon-btn" data-act="fo-m" data-arg="-1" aria-label="${esc(t("Earlier month"))}">${icon("back")}</button><b class="nowrap">${esc(monthLabel(m))}</b><button type="button" class="icon-btn" data-act="fo-m" data-arg="1" aria-label="${esc(t("Later month"))}" ${m >= cur ? "disabled" : ""}>${icon("right")}</button></span>`;
     const body = d.exp > 0
       ? `<div class="fo-grid"><div class="fo-chart">${donut([{ v: d.got, c: "var(--ok)" }, { v: d.left, c: "var(--bad)" }], Math.round(d.rate) + "%", t("collected"))}</div>
-        <div class="fo-sum"><div class="fo-s fo-s--ok"><span>${icon("check")}${esc(t("Collected"))}</span><b>${esc(money(d.got))}</b><small>${esc(f1c(d.rate))} ${esc(t("of expected"))}</small></div>
-        <div class="fo-s fo-s--bad"><span>${icon("clock")}${esc(t("Pending amount"))}</span><b>${esc(money(d.left))}</b><small>${esc(f1c(pend))} ${esc(t("of expected"))}</small></div></div></div>
+        <div class="fo-sum"><button type="button" class="fo-s fo-s--ok" data-act="fo-list" data-arg="ok"><span>${icon("check")}${esc(t("Collected"))}${icon("right", "fo-go")}</span><b>${esc(money(d.got))}</b><small>${esc(f1c(d.rate))} ${esc(t("of expected"))} · ${esc(t("{n} students", { n: d.rows.filter((x) => x.got > 0).length }))}</small></button>
+        <button type="button" class="fo-s fo-s--bad" data-act="fo-list" data-arg="bad"><span>${icon("clock")}${esc(t("Pending amount"))}${icon("right", "fo-go")}</span><b>${esc(money(d.left))}</b><small>${esc(f1c(pend))} ${esc(t("of expected"))} · ${esc(t("{n} students", { n: d.rows.filter((x) => x.left > 0).length }))}</small></button></div></div>
         <div class="fo-tot"><span>${esc(t("Total expected"))}</span><b>${esc(money(d.exp))}</b><span class="mut sm">${esc(t("Collection rate"))}: <b>${esc(f1c(d.rate))}</b></span></div>
         <div class="fo-leg"><span><i style="background:var(--ok)"></i>${esc(t("Collected"))}</span><span><i style="background:var(--bad)"></i>${esc(t("Pending amount"))}</span>${d.due ? "" : `<span class="warn">${esc(t("This month is not due yet."))}</span>`}</div>`
       : empty(t("No fees to collect for {m}.", { m: monthLabel(m) }), "wallet");
@@ -405,25 +406,95 @@ act("fo-m", (el) => {
   st.m = m; refresh();
 });
 // every student of the month + the extra fees, as a printable table / CSV
-act("fo-report", async () => {
+act("fo-report", () => openReport());
+async function openReport() {
   const d = FOD;
   if (!d) return;
-  const sf = await db.list("sf").catch(() => []), ex = sf.map((f) => ({ f, ...manualState(f) })), exOpen = ex.filter((x) => x.left > 0).sort((a, b) => b.left - a.left);
+  const sf = await db.list("sf").catch(() => []), ex = sf.map((f) => ({ f, ...manualState(f) })), exAll = ex.slice().sort((a, b) => (b.left > 0) - (a.left > 0) || b.left - a.left || (b.f.t || 0) - (a.f.t || 0));
+  const old = document.getElementById("fo-sc"), keep = old ? old.scrollTop : 0;
+  closeModals();
   const exSum = (k) => n2(ex.reduce((a, x) => a + (k === "amt" ? +x.f.amt || 0 : x[k]), 0));
   const open = d.rows.filter((x) => x.left > 0).sort((a, b) => b.left - a.left);
   const rate = (a, b) => (b > 0 ? f1c((a / b) * 100) : "–");
   const TD = "padding:6px 6px;border-top:1px solid var(--line)";
   modal(`<h3>${esc(t("Fee collection report"))}: ${esc(monthLabel(d.m))}</h3>
     <div class="tiles mt"><div class="stat" style="--c:var(--blue)"><span class="stat-top">${esc(t("Expected"))}</span><span class="stat-v">${esc(money(d.exp))}</span></div><div class="stat" style="--c:var(--ok)"><span class="stat-top">${esc(t("Collected"))}</span><span class="stat-v">${esc(money(d.got))}</span></div><div class="stat" style="--c:var(--bad)"><span class="stat-top">${esc(t("Pending amount"))}</span><span class="stat-v">${esc(money(d.left))}</span></div><div class="stat" style="--c:var(--gold-ink)"><span class="stat-top">${esc(t("Collection rate"))}</span><span class="stat-v">${esc(f1c(d.rate))}</span></div></div>
-    <div style="max-height:52vh;overflow:auto">
+    <div id="fo-sc" style="max-height:52vh;overflow:auto">
     <h4 class="mt">${esc(t("By batch"))}</h4>
     ${d.per.length ? `<div class="tw"><table class="tbl"><tr><th>${esc(t("Batch"))}</th><th class="n">${esc(t("Students"))}</th><th class="n">${esc(t("Expected"))}</th><th class="n">${esc(t("Collected"))}</th><th class="n">${esc(t("Due"))}</th><th class="n">%</th></tr>${d.per.map((b) => `<tr><td>${esc(b.b.name)}</td><td class="n">${b.n}</td><td class="n">${esc(money(b.exp))}</td><td class="n">${esc(money(b.got))}</td><td class="n">${esc(money(b.left))}</td><td class="n">${esc(rate(b.got, b.exp))}</td></tr>`).join("")}</table></div>` : empty(t("Nothing to show."), "wallet")}
     <h4 class="mt">${esc(t("Students with fees pending"))} (${open.length})</h4>
     ${open.length ? `<div class="list">${open.map(({ s, r, left }) => row({ av: avatar(s, 34), title: s.name, sub: esc([batchOf(s.bid) ? batchOf(s.bid).name : "", s.roll].filter(Boolean).join(" · ") + " · " + money(r.paid) + " / " + money(r.fee)), right: `<b class="${r.state === "partial" ? "warn" : "bad"}">${esc(money(left))}</b>`, act: "open-user", arg: s.id })).join("")}</div>` : empty(t("Everybody has paid."), "check")}
     ${ex.length ? `<h4 class="mt">${esc(t("Extra fees (all months)"))}</h4><p class="mut sm">${esc(t("Expected"))} ${esc(money(exSum("amt")))} · ${esc(t("Collected"))} ${esc(money(exSum("paid")))} · ${esc(t("Pending amount"))} <b class="${exSum("left") ? "bad" : "ok"}">${esc(money(exSum("left")))}</b></p>
-      ${exOpen.length ? `<div class="list">${exOpen.slice(0, 40).map(({ f, left }) => { const s = S.U.find((u) => u.id === f.sid); return row({ av: s ? avatar(s, 30) : "", title: s ? s.name : "?", sub: esc(f.note || ""), right: `<b class="bad">${esc(money(left))}</b>`, act: s ? "open-user" : undefined, arg: f.sid }); }).join("")}</div>` : ""}` : ""}</div>
+      <div class="list">${exAll.slice(0, 60).map(({ f, left }) => { const s = S.U.find((u) => u.id === f.sid); return row({ av: avatar(s || { name: "?" }, 30), title: s ? s.nick || s.name : t("Student not found"), sub: esc([f.note || "", money(f.amt)].filter(Boolean).join(" · ")), right: `<b class="${left > 0 ? "bad" : "ok"}">${esc(left > 0 ? money(left) : t("Paid"))}</b>${btn(t("Delete"), "fo-xdel", { arg: f.id, xs: true, kind: "bad", ic: "trash" })}`, act: s ? "open-user" : undefined, arg: f.sid }); }).join("")}</div>` : ""}</div>
     <div class="row mt">${btn(t("Download CSV"), "fo-csv", { sm: true, ic: "download" })}</div>
     <div class="mod-f"><button class="btn" data-act="pu-close">${esc(t("Close"))}</button></div>`);
+  if (keep) { const n = document.getElementById("fo-sc"); if (n) n.scrollTop = keep; }
+}
+// a wrong or leftover extra fee (even one whose student is gone) can be deleted right here
+act("fo-xdel", async (el) => {
+  if (!canFees()) return;
+  const f = await db.get("sf/" + el.dataset.arg);
+  if (!f) { toast(t("Not found"), "bad"); return openReport(); }
+  const s = S.U.find((u) => u.id === f.sid);
+  if (!(await ask(t("Delete the fee “{n}” of {a} for {s}? Its payments are removed too.", { n: f.note || "", a: money(f.amt), s: s ? s.nick || s.name : t("Student not found") }), { danger: true, ok: t("Delete") }))) return;
+  await db.del("sf/" + f.id);
+  toast(t("Deleted"), "ok");
+  await openReport();
+});
+
+// ---------- the lists behind the Collected / Pending amount tiles ----------
+// photo, nickname (name if there is none), the ID under it and the batch on the right
+const nameKey = (s) => String((batchOf(s.bid) || {}).name || "") + "\u0001" + String(s.nick || s.name || "");
+async function reloadFOD() {
+  if (!FOD) return;
+  const [P, BF] = await Promise.all([db.list("pay", ["m", "==", FOD.m]).catch(() => []), db.list("bf", ["m", "==", FOD.m]).catch(() => [])]);
+  FOD = collect(FOD.m, P, BF);
+}
+function openList(kind) {
+  const d = FOD;
+  if (!d) return;
+  const ok = kind === "ok", L = d.rows.filter((x) => (ok ? x.got > 0 : x.left > 0)).sort((a, b) => nameKey(a.s).localeCompare(nameKey(b.s), undefined, { numeric: true, sensitivity: "base" }));
+  const tot = n2(L.reduce((a, x) => a + (ok ? x.got : x.left), 0));
+  closeModals();
+  modal(`<h3>${esc(ok ? t("Collected") : t("Pending amount"))}: ${esc(monthLabel(d.m))}</h3>
+    <p class="mut sm">${esc(t("{n} students", { n: L.length }))} · <b class="${ok ? "ok" : "bad"}">${esc(money(tot))}</b></p>
+    <div class="list fo-lst">${L.map(({ s, r, got, left }) => {
+      const b = batchOf(s.bid), sub = ok
+        ? `<button type="button" class="fe-st fe-st--${r.state === "paid" ? "ok" : "warn"}" data-act="fe-st" data-arg="${esc(s.id + "|" + d.m + "|ok")}">${esc(r.state === "paid" ? t("Paid") : t("Partial"))} ${esc(money(got))}${icon("down")}</button>`
+        : `<small class="${r.state === "partial" ? "warn" : "bad"}">${esc(r.state === "partial" ? t("Left {a}", { a: money(left) }) : t("Due") + " " + money(left))}</small>`;
+      return row({ av: avatar(s, 40), titleHtml: esc(s.nick || s.name), sub: esc(s.roll || ""), right: `<div class="fo-r"><b>${esc(b ? b.name : "")}</b>${sub}</div>`, act: "open-user", arg: s.id });
+    }).join("") || empty(ok ? t("Nobody has paid yet.") : t("Everybody has paid."), ok ? "wallet" : "check")}</div>
+    <div class="mod-f"><button class="btn" data-act="pu-close">${esc(t("Close"))}</button></div>`);
+}
+act("fo-list", (el) => openList(el.dataset.arg));
+
+// ---------- a payment entered by mistake: Paid -> Unpaid ----------
+// Removes that month's payment record(s) of the student, so the month is open again. The student gets a message.
+act("fe-st", async (el) => {
+  if (!canFees()) return;
+  const [sid, m, from] = String(el.dataset.arg).split("|"), u = S.U.find((x) => x.id === sid);
+  if (!u) return;
+  const P = (await db.list("pay", ["sid", "==", sid], ["m", "==", m]).catch(() => [])).sort((x, y) => (x.t || 0) - (y.t || 0));
+  if (!P.length) return toast(t("No payment found for this month"), "bad");
+  const dlg = modal(`<div class="row-nw">${avatar(u, 44)}<div class="sp"><h3 style="margin:0">${esc(u.nick || u.name)}</h3><span class="mut">${esc(u.roll || "")} · ${esc(monthLabel(m))}</span></div></div>
+    <div class="list mt">${P.map((p) => `<div class="item"><div class="item-b"><b>${esc(p.method || "")}</b><span class="mut">${esc(fmtDate(p.d) || "–")}${p.tx ? " · " + esc(p.tx) : ""}</span></div><div class="item-a"><b class="ok">${esc(money(p.amt))}</b></div></div>`).join("")}</div>
+    <p class="mut sm mt">${esc(t("Mark as Unpaid removes the payment above, so this month is unpaid again. The student is told."))}</p>
+    <div class="mod-f"><button type="button" class="btn" data-r="0">${esc(t("Cancel"))}</button>${btn(t("Mark as Unpaid"), "fe-unpaid", { arg: el.dataset.arg, kind: "bad", ic: "x" })}</div>`);
+  dlg.body.addEventListener("click", (e) => { if (e.target.closest('[data-r="0"]')) dlg.close(); });   // Cancel closes only this dialog, the list below stays
+});
+act("fe-unpaid", async (el) => {
+  if (!canFees()) return;
+  const [sid, m, from] = String(el.dataset.arg).split("|");
+  const P = await db.list("pay", ["sid", "==", sid], ["m", "==", m]).catch(() => []);
+  if (P.length) {
+    const tot = n2(P.reduce((a, p) => a + (+p.amt || 0), 0));
+    for (const p of P) await db.del("pay/" + p.id);
+    notify(sid, t("Payment of ৳{a} for {m} was removed by the admin. The fee is unpaid again.", { a: tot, m }));
+    toast(t("Marked as unpaid"), "ok");
+  }
+  closeModals();
+  refresh();
+  if (from === "ok" || from === "bad") { await reloadFOD(); openList(from); }
 });
 act("fo-csv", () => {
   const d = FOD;
@@ -474,4 +545,9 @@ addBN({
   "Detailed report": "বিস্তারিত রিপোর্ট", "Open Fees": "ফি পাতা খুলুন", "Fee collection report": "ফি আদায় রিপোর্ট", "Expected": "প্রত্যাশিত", "By batch": "ব্যাচ অনুযায়ী", "Nothing to show.": "দেখানোর কিছু নেই।",
   "Students with fees pending": "যাদের ফি বাকি", "Everybody has paid.": "সবাই পরিশোধ করেছে।", "Extra fees (all months)": "অতিরিক্ত ফি (সব মাস)", "Download CSV": "CSV ডাউনলোড",
 });
-
+addBN({
+  "Nobody has paid yet.": "এখনো কেউ পরিশোধ করেনি।", "Student not found": "ছাত্র পাওয়া যায়নি", "Mark as Unpaid": "অপরিশোধিত করুন", "Marked as unpaid": "অপরিশোধিত করা হয়েছে",
+  "Mark as Unpaid removes the payment above, so this month is unpaid again. The student is told.": "অপরিশোধিত করলে উপরের পেমেন্ট সরে যায়, ফলে এই মাস আবার বাকি হয়ে যায়। ছাত্রকে জানানো হয়।",
+  "Payment of ৳{a} for {m} was removed by the admin. The fee is unpaid again.": "{m} মাসের ৳{a} পেমেন্ট অ্যাডমিন সরিয়ে দিয়েছেন। ফি আবার বাকি।",
+  "Delete the fee “{n}” of {a} for {s}? Its payments are removed too.": "{s} এর “{n}” ফি ({a}) মুছবেন? এর পেমেন্টগুলোও মুছে যাবে।",
+});
