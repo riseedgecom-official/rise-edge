@@ -210,6 +210,14 @@ export function findBatch(list, cls, grp, gd) {
 }
 
 // ---------- syllabus ----------
+// "All" ticked in a subject: a -1 inside the ticked list means every topic (the subject counts as 100%, even when it has no topics yet).
+// It lives in the same list (sd.done[subject] for the class, ms.c[subject] for a student), so no new field is needed.
+export const ALL = -1;
+export const picked = (a, n = Infinity) => [...new Set((a || []).filter((i) => i >= 0 && i < n))];
+export const allOn = (a, n) => (a || []).includes(ALL) || (n > 0 && picked(a, n).length >= n);
+export const doneN = (a, n) => (allOn(a, n) ? n : picked(a, n).length);
+export const donePct = (a, n) => (allOn(a, n) ? 100 : n ? (picked(a, n).length / n) * 100 : 0);
+export const doneText = (a, n) => (n ? doneN(a, n) + " / " + n : allOn(a, n) ? "100%" : "0%");
 // sd = syllabus doc of the batch: {done:{subject:[idx]}, tl:{subject:[topics]}, cx:[{s,t,g}]}
 // -> [{s, t:[topics], custom:boolean}]
 export function subjectsFor(cls, grp, sd) {

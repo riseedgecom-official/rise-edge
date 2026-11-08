@@ -6,7 +6,7 @@ import {
 } from "./lib-core.js";
 import { icon, avatar, tag, empty, notice, card, row, btn, chips, input, select, textarea, batchPicker, meter, ask, form, askText, toast, showDoc } from "./lib-ui.js";
 import { recalcBatch, notify, logAct, dropBatchCache } from "./lib-svc.js";
-import { examRows, grade, subjectsFor, counted } from "./lib-stats.js";
+import { examRows, grade, subjectsFor, counted, ALL, picked, allOn, doneText, donePct } from "./lib-stats.js";
 import { readTable, toCSV } from "./lib-sheet.js";
 
 const noBatch = () => empty(isStudent() ? t("You are not in a batch yet.") : t("Add a batch first."), "layers");
@@ -483,11 +483,11 @@ async function staffSyllabus() {
   return `${batchPicker()}
   ${b.grp ? "" : `<div class="mb">${select("grp", [["", t("All groups")], ["Science", t("Science")], ["Commerce", t("Commerce")], ["Arts", t("Arts")]], st.grp || "", { "data-change": "sy-grp", label: t("Group") })}</div>`}
   ${y ? `<div class="mb">${select("sj", ZLIST.map((x) => x.s), st.sj, { "data-change": "sy-sj", label: t("Subject") })}</div>
-  <div class="card"><div class="card-h"><h3>${esc(y.s)}</h3><span class="mut sm">${dn.length} / ${y.t.length}</span></div>${meter(y.t.length ? (dn.length / y.t.length) * 100 : 0, "var(--ok)")}
-    <div class="mt">${y.t.map((x, i) => `<div class="check"><input type="checkbox" class="zt" value="${i}" ${dn.includes(i) ? "checked" : ""}><span>${esc(x)}</span>${canEdit() ? `<button class="icon-btn" style="width:34px;height:34px" data-act="sy-edit" data-arg="${i}" aria-label="${esc(t("Edit"))}">${icon("edit")}</button><button class="icon-btn" style="width:34px;height:34px" data-act="sy-del" data-arg="${i}" aria-label="${esc(t("Delete"))}">${icon("trash")}</button>` : ""}</div>`).join("") || `<p class="mut">${esc(t("No topics."))}</p>`}</div>
+  <div class="card"><div class="card-h"><h3>${esc(y.s)}</h3><span class="mut sm">${esc(doneText(dn, y.t.length))}</span></div>${meter(donePct(dn, y.t.length), "var(--ok)")}
+    <div class="mt"><div class="check check--all"><input type="checkbox" id="zt-all" data-change="sy-all" ${allOn(dn, y.t.length) ? "checked" : ""}><span><b>${esc(t("All"))}</b></span></div>${y.t.map((x, i) => `<div class="check"><input type="checkbox" class="zt" data-change="sy-one" value="${i}" ${allOn(dn, y.t.length) || dn.includes(i) ? "checked" : ""}><span>${esc(x)}</span>${canEdit() ? `<button class="icon-btn" style="width:34px;height:34px" data-act="sy-edit" data-arg="${i}" aria-label="${esc(t("Edit"))}">${icon("edit")}</button><button class="icon-btn" style="width:34px;height:34px" data-act="sy-del" data-arg="${i}" aria-label="${esc(t("Delete"))}">${icon("trash")}</button>` : ""}</div>`).join("")}</div>
     <div class="row mt">${btn(t("Save progress"), "sy-save", { kind: "pri", ic: "check" })}</div>
     ${canEdit() ? `<div class="inline mt"><input id="sy-new" placeholder="${esc(t("New topic name"))}">${btn(t("Add topic"), "sy-add", { ic: "plus" })}</div>` : ""}</div>
-  <div class="mt">${card(t("Student confidence") + " · " + y.s, stu.map((s) => { const c = (((M.find((m) => m.sid === s.id) || {}).c || {})[y.s]) || []; return `<details><summary>${esc(s.name)} · ${c.length} / ${y.t.length}</summary>${c.map((i) => `<div class="mut sm">✔ ${esc(y.t[i] || "")}</div>`).join("") || `<p class="mut sm">${esc(t("Nothing ticked yet."))}</p>`}</details>`; }).join("") || `<p class="mut">${esc(t("No students."))}</p>`)}</div>` : empty(t("No syllabus for this class yet."), "list")}
+  <div class="mt">${card(t("Student confidence") + " · " + y.s, stu.map((s) => { const c = (((M.find((m) => m.sid === s.id) || {}).c || {})[y.s]) || [], ca = allOn(c, y.t.length); return `<details><summary>${esc(s.name)} · ${esc(doneText(c, y.t.length))}</summary>${ca ? `<div class="mut sm">✔ ${esc(t("All"))}</div>` : ""}${(ca ? [] : picked(c, y.t.length)).map((i) => `<div class="mut sm">✔ ${esc(y.t[i] || "")}</div>`).join("") || (ca ? "" : `<p class="mut sm">${esc(t("Nothing ticked yet."))}</p>`)}</details>`; }).join("") || `<p class="mut">${esc(t("No students."))}</p>`)}</div>` : empty(t("No syllabus for this class yet."), "list")}
   ${isStaff() ? `<form class="card stack-s mt" data-submit="sy-extra"><h3>${esc(t("Add extra subject"))}</h3>${input("s", { label: t("Subject") })}${select("g", [["", t("All groups")], ["Science", t("Science")], ["Commerce", t("Commerce")], ["Arts", t("Arts")]], "", { label: t("Group") })}${textarea("t", { label: t("Topics / chapters, one per line"), rows: 5 })}<button class="btn btn--pri" type="submit">${icon("plus")}${esc(t("Add subject"))}</button></form>` : ""}
   ${SD.cx.length && isStaff() ? card(t("Extra subjects"), `<div class="list">${SD.cx.map((c, i) => row({ title: c.s, sub: t("{n} topics", { n: c.t.length }) + (c.g ? " · " + t(c.g) : ""), right: btn(t("Delete"), "sy-xdel", { arg: i, sm: true, kind: "bad" }) })).join("")}</div>`) : ""}`;
 }
@@ -497,11 +497,15 @@ const putSD = (patch) => db.set("sd/" + S.bid, { bid: S.bid, ...patch }, true);
 act("sy-save", async () => {
   const sj = Z().sj;
   if (!subjectOk(S.bid, sj)) return toast(t("This subject is not yours."), "bad");
-  SD.done[sj] = $$(".zt").filter((b) => b.checked).map((b) => +b.value);
+  const all = $("#zt-all");
+  SD.done[sj] = [...$$(".zt").filter((b) => b.checked).map((b) => +b.value), ...(all && all.checked ? [ALL] : [])];
   await putSD({ done: mySubjects(S.bid) ? { [sj]: SD.done[sj] } : SD.done });
   notify("batch", t("Syllabus updated: {n}", { n: sj }), S.bid);
   toast(t("Saved"), "ok"); refresh();
 });
+// "All": ticks or unticks every topic of the subject; ticking the topics one by one to the end ticks "All" too
+onChange("sy-all", (el) => { $$(".zt").forEach((b) => { b.checked = el.checked; }); });
+onChange("sy-one", () => { const a = $("#zt-all"), z = $$(".zt"); if (a && z.length) a.checked = z.every((b) => b.checked); });
 act("sy-xdel", async (el) => {
   if (!(await ask(t("Delete?"), { danger: true, ok: t("Delete") }))) return;
   SD.cx.splice(+el.dataset.arg, 1);
@@ -522,7 +526,7 @@ async function setTopics(subj, list, map) {
     const fx = (a) => [...new Set((a || []).map(map).filter((i) => i != null && i >= 0))];
     if (SD.done[subj]) SD.done[subj] = fx(SD.done[subj]);
     const M = await db.list("ms", ["bid", "==", S.bid]).catch(() => []);
-    for (const m of M) { const c = m.c || {}; if (c[subj]) { c[subj] = fx(c[subj]); await db.upd("ms/" + m.id, { c }).catch(() => {}); } }
+    for (const m of M) { const c = m.c || {}, was = c[subj]; if (was) { c[subj] = fx(was); if (JSON.stringify(c[subj]) !== JSON.stringify(was)) await db.upd("ms/" + m.id, { c }).catch(() => {}); } }
   }
   const k = SD.cx.findIndex((c) => c.s === subj);
   if (k >= 0) { SD.cx[k].t = list; await putSD({ done: SD.done, cx: SD.cx }); }
@@ -538,7 +542,7 @@ act("sy-del", async (el) => {
 act("sy-add", async () => {
   const y = curSubj(), n = (($("#sy-new") || {}).value || "").trim();
   if (!y || !n) return toast(t("New topic name"), "bad");
-  await setTopics(y.s, [...y.t, n]);
+  await setTopics(y.s, [...y.t, n], (j) => j);   // a new topic is not ticked yet, so "All" (100%) is cleared; the topics that were ticked stay ticked
   logAct("Added a syllabus topic"); refresh();
 });
 act("sy-edit", async (el) => {
@@ -560,14 +564,19 @@ async function studentSyllabus() {
   const L = subjectsFor(b.cls, S.me.grp || b.grp || "", sd);
   if (!L.length) return empty(t("No syllabus yet. Your batch class is not set."), "list");
   return `<div class="notice">${icon("info")}<div><b>${ZMSG}</b></div></div>
-  <div class="mt stack">${L.map((y) => { const dn = sd.done[y.s] || [], c = ZM.c[y.s] || []; return `<details class="card"><summary><b>${esc(y.s)}</b> <span class="mut sm">${dn.length} / ${y.t.length} ${esc(t("finished in class"))} · ${c.length} ${esc(t("confident"))}</span></summary>
-    <div class="mt">${meter(y.t.length ? (dn.length / y.t.length) * 100 : 0, "var(--ok)")}</div>
-    ${y.t.map((x, i) => `<div class="check"><input type="checkbox" class="zm" data-s="${esc(y.s)}" value="${i}" ${c.includes(i) ? "checked" : ""}><span>${esc(x)}</span>${dn.includes(i) ? tag(t("Done in class"), "ok") : ""}</div>`).join("")}</details>`; }).join("")}</div>
+  <div class="mt stack">${L.map((y) => { const n = y.t.length, dn = sd.done[y.s] || [], c = ZM.c[y.s] || [], dAll = allOn(dn, n), cAll = allOn(c, n); return `<details class="card"><summary><b>${esc(y.s)}</b> <span class="mut sm">${esc(doneText(dn, n))} ${esc(t("finished in class"))} · ${esc(doneText(c, n))} ${esc(t("confident"))}</span></summary>
+    <div class="mt">${meter(donePct(dn, n), "var(--ok)")}</div>
+    <div class="check check--all"><input type="checkbox" class="zma" data-s="${esc(y.s)}" data-change="sy-zall" ${cAll ? "checked" : ""}><span><b>${esc(t("All"))}</b></span>${dAll ? tag(t("Done in class"), "ok") : ""}</div>
+    ${y.t.map((x, i) => `<div class="check"><input type="checkbox" class="zm" data-s="${esc(y.s)}" data-change="sy-zone" value="${i}" ${cAll || c.includes(i) ? "checked" : ""}><span>${esc(x)}</span>${dAll || dn.includes(i) ? tag(t("Done in class"), "ok") : ""}</div>`).join("")}</details>`; }).join("")}</div>
   <div class="mt">${btn(t("Save"), "sy-mine", { kind: "pri", ic: "check" })}</div>`;
 }
+const zmBoxes = (sj) => $$(".zm").filter((b) => b.dataset.s === sj);
+onChange("sy-zall", (el) => { zmBoxes(el.dataset.s).forEach((b) => { b.checked = el.checked; }); });
+onChange("sy-zone", (el) => { const a = $$(".zma").find((b) => b.dataset.s === el.dataset.s), z = zmBoxes(el.dataset.s); if (a && z.length) a.checked = z.every((b) => b.checked); });
 act("sy-mine", async () => {
   const c = {};
   $$(".zm").forEach((b) => { if (b.checked) (c[b.dataset.s] = c[b.dataset.s] || []).push(+b.value); });
+  $$(".zma").forEach((b) => { if (b.checked) (c[b.dataset.s] = c[b.dataset.s] || []).push(ALL); });
   await db.set("ms/" + S.pid, { sid: S.pid, bid: S.me.bid, c, t: Date.now() });
   toast(t("Saved"), "ok");
 });

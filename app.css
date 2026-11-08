@@ -515,3 +515,5 @@ table.tbl{width:100%;border-collapse:collapse;font-size:14px}
 .ab-r .item-b span{display:block}
 .ab-name{all:unset;box-sizing:border-box;cursor:pointer;display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;color:var(--blue-ink);text-decoration:underline;text-underline-offset:3px}
 .ab-name:focus-visible{outline:3px solid color-mix(in srgb,var(--blue) 55%,transparent);outline-offset:2px;border-radius:4px}
+.check--all{padding-bottom:8px;margin-bottom:6px;border-bottom:1px dashed var(--line)}
+.check--all b{font-weight:800}
