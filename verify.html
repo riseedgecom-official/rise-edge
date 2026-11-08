@@ -73,9 +73,9 @@ import { readCard } from "./lib-idq.js";
 // Edit the academy name and phone here if they change (this page does not read the app's settings).
 const ACADEMY = "Rise Edge Academy", PHONE = "+880 1771-625085", TEL = "+8801771625085";
 const T = {
-  en: { S: "Student ID card", T: "Teacher ID card", bad: "This QR could not be read", cls: "Class", batch: "Batch", subj: "Subject", ses: "Session", id: "ID",
+  en: { S: "Student ID card", T: "Teacher ID card", A: "Admin ID card", role: "Role", bad: "This QR could not be read", cls: "Class", batch: "Batch", subj: "Subject", ses: "Session", id: "ID",
         note: "This page shows what is printed on the ID card. If something looks wrong, call the academy.", badNote: "It may be damaged or it is not an ID card of this academy. Please call the academy.", call: "Call the academy", portal: "Open the portal" },
-  bn: { S: "ছাত্র আইডি কার্ড", T: "শিক্ষক আইডি কার্ড", bad: "এই QR পড়া যায়নি", cls: "শ্রেণি", batch: "ব্যাচ", subj: "বিষয়", ses: "সেশন", id: "আইডি",
+  bn: { S: "ছাত্র আইডি কার্ড", T: "শিক্ষক আইডি কার্ড", A: "অ্যাডমিন আইডি কার্ড", role: "পদ", bad: "এই QR পড়া যায়নি", cls: "শ্রেণি", batch: "ব্যাচ", subj: "বিষয়", ses: "সেশন", id: "আইডি",
         note: "এই পাতায় আইডি কার্ডে ছাপা তথ্যই দেখানো হয়েছে। কিছু ঠিক না লাগলে একাডেমিতে ফোন করুন।", badNote: "QR ক্ষতিগ্রস্ত হতে পারে, বা এটি এই একাডেমির আইডি কার্ড নয়। অনুগ্রহ করে একাডেমিতে ফোন করুন।", call: "একাডেমিতে ফোন করুন", portal: "পোর্টাল খুলুন" },
 };
 const $ = (id) => document.getElementById(id);
@@ -96,7 +96,7 @@ function draw() {
     document.title = L.bad + " · " + ACADEMY;
     return;
   }
-  const st = card.k === "S", rows = st ? [[L.cls, card.a], [L.batch, card.b], [L.ses, card.y]] : [[L.subj, card.a], [L.ses, card.y]];
+  const st = card.k === "S", rows = st ? [[L.cls, card.a], [L.batch, card.b], [L.ses, card.y]] : card.k === "A" ? [[L.role, card.a], [L.ses, card.y]] : [[L.subj, card.a], [L.ses, card.y]];
   $("pill").textContent = L[card.k];
   $("ini").textContent = [...(card.name || card.id)][0] || "?";
   $("name").textContent = card.name || card.id;

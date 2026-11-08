@@ -43,23 +43,27 @@ function idBg(back) {
 }
 // What the card's QR holds: a link to verify.html with what is printed on the card (see lib-idq.js).
 // If that is too long for one QR it says less; as a last resort the QR is just the ID.
+// The admin has no roll number, so the card shows ADMIN as the ID.
+const cardKind = (u) => (u.role === "student" ? "S" : u.role === "admin" ? "A" : "T");
+const idOf = (u) => u.roll || (u.role === "admin" ? "ADMIN" : u.id);
 function idQrText(u) {
-  const st = u.role === "student", b = batchOf(u.bid) || {}, c0 = u.cls || b.cls, g = u.grp || b.grp;
-  const card = { k: st ? "S" : "T", id: u.roll || u.id, name: u.name, a: st ? (c0 ? "Class " + c0 + (g ? " · " + g : "") : "") : (u.subject || ""), b: st ? (b.name || "") : "", y: (String(u.roll || "").match(/-(\d{4})-/) || [])[1] || "" };
+  const st = u.role === "student", ad = u.role === "admin", b = batchOf(u.bid) || {}, c0 = u.cls || b.cls, g = u.grp || b.grp;
+  const card = { k: cardKind(u), id: idOf(u), name: u.name, a: st ? (c0 ? "Class " + c0 + (g ? " · " + g : "") : "") : ad ? "Admin" : (u.subject || ""), b: st ? (b.name || "") : "", y: (String(u.roll || "").match(/-(\d{4})-/) || [])[1] || "" };
   const fits = (l) => { try { qrMatrix(l); return true; } catch (e) { return false; } };
-  return fitLink(new URL("verify.html", location.href).href, card, fits) || String(u.roll || u.id);
+  return fitLink(new URL("verify.html", location.href).href, card, fits) || String(idOf(u));
 }
 function frontHtml(u) {
-  const st = u.role === "student", b = batchOf(u.bid) || {};
+  const st = u.role === "student", ad = u.role === "admin", b = batchOf(u.bid) || {};
   const rows = st
     ? [[t("Name"), u.name], [t("Roll"), u.roll], [t("Class"), clsText(u)], [t("Batch"), b.name || "–"], [t("Guardian Name"), u.gname || "–"], [t("Guardian Phone"), u.gphone || "–"]]
+    : ad ? [[t("Name"), u.name], [t("ID"), idOf(u)], [t("Role"), t("Admin")], [t("Phone"), u.phone || "–"], [t("Blood group"), u.bg || "–"]]
     : [[t("Name"), u.name], [t("ID"), u.roll], [t("Subject"), u.subject || "–"], [t("Phone"), u.phone || "–"], [t("Blood group"), u.bg || "–"]];
   const yr = (String(u.roll || "").match(/-(\d{4})-/) || [])[1] || "";
   return `<div class="idc">${idBg(false)}<div class="idc-in">
     <img class="idc-logo" src="logo.jpg" alt="">
     <div class="idc-name">${esc(instName().toUpperCase())}</div>
     <div class="idc-tag">${esc(S.INST.tag || t("Student, teacher and admin portal"))}</div>
-    <div class="idc-role">${esc(st ? t("STUDENT ID CARD") : t("TEACHER ID CARD"))}</div>
+    <div class="idc-role">${esc(st ? t("STUDENT ID CARD") : ad ? t("ADMIN ID CARD") : t("TEACHER ID CARD"))}</div>
     <div class="idc-main"><div class="idc-l"><div class="idc-photo">${u.pic ? `<img src="${esc(u.pic)}" alt="">` : esc([...(u.name || "?")][0])}</div><div class="idc-qr">${qrSvg(idQrText(u), { margin: 0 })}</div><div class="idc-scan">${esc(t("Scan to verify"))}</div></div>
       <div class="idc-r">${rows.map(([l, v]) => `<div class="idc-f${String(v).length > 34 ? " idc-f--xs" : String(v).length > 22 ? " idc-f--s" : ""}"><small>${esc(l)}</small><b>${esc(v)}</b></div>`).join("")}</div></div>
     <div class="idc-foot"><span>${esc(S.INST.phone || "")}</span><span>${esc(yr ? t("Session") + " " + yr : "")}</span></div></div></div>`;
@@ -93,11 +97,12 @@ page("idcard", async () => {
   if (isStudent() || (!isStaff() && !isTeacher())) return `<div class="tc"><div class="idc-sheet">${frontHtml(S.me)}${backHtml(S.me)}</div><div class="mt">${btn(t("Print / Save PDF"), "id-show", { arg: S.pid, kind: "pri", ic: "print" })}</div></div>`;
   const st = IC(); st.k = st.k || "s";
   const tabs = isStaff() ? chips([{ k: "s", label: t("Students") }, { k: "t", label: t("Teachers") }], st.k, "id-tab") : "";
+  const mine = isAdmin() || isTeacher() ? `<div class="mb">${btn(t("My ID card"), "id-show", { arg: S.pid, sm: true, kind: isAdmin() ? "pri" : "", ic: "idcard" })}</div>` : "";   // the admin and every teacher can open their own card
   if (st.k === "t" && isStaff()) {
-    return `${tabs}${card(t("Teachers"), S.TC.length ? `<div class="list">${S.TC.filter((x) => x.active !== false).sort((a, b) => cmp(a.name, b.name)).map((x) => row({ av: avatar(x, 36), title: x.name, sub: esc(x.roll || ""), right: btn(t("ID card"), "id-show", { arg: x.id, sm: true, ic: "idcard" }) })).join("")}</div>` : empty(t("No teacher yet."), "cap"))}`;
+    return `${tabs}${mine}${card(t("Teachers"), S.TC.length ? `<div class="list">${S.TC.filter((x) => x.active !== false).sort((a, b) => cmp(a.name, b.name)).map((x) => row({ av: avatar(x, 36), title: x.name, sub: esc(x.roll || ""), right: btn(t("ID card"), "id-show", { arg: x.id, sm: true, ic: "idcard" }) })).join("")}</div>` : empty(t("No teacher yet."), "cap"))}`;
   }
   const L = activeStudents().sort((a, b) => cmp(a.roll, b.roll));
-  return `${tabs}${batchPicker()}${isTeacher() ? `<div class="mb">${btn(t("My ID card"), "id-show", { arg: S.pid, sm: true, ic: "idcard" })}</div>` : ""}
+  return `${tabs}${mine}${batchPicker()}
     ${card(t("Students") + ` (${L.length})`, L.length ? `<div class="list">${L.map((s) => row({ av: avatar(s, 36), title: s.name, sub: esc(s.roll || ""), right: btn(t("ID card"), "id-show", { arg: s.id, sm: true, ic: "idcard" }) })).join("")}</div><div class="mt">${btn(t("Print all cards of this batch"), "id-all", { ic: "print" })}</div>` : empty(t("No students in this batch."), "users"))}`;
 }, { title: "ID card" });
 act("id-tab", (el) => { IC().k = el.dataset.arg; refresh(); });
@@ -113,7 +118,7 @@ page("profile", async () => {
   return `${pend ? notice(`<b>${esc(t("Waiting for admin approval"))}</b><br>${esc(t("Your account is created. The admin or a co-admin must approve it before you can open the other pages."))}`, "warn", "clock") : ""}
   <div class="card tc"><div style="display:flex;justify-content:center">${avatar(u, 92)}</div><h2 style="margin:10px 0 2px">${esc(u.name)}</h2>${tag(roleName(u), "info")}
     <div class="mt"><label class="btn btn--sm" style="cursor:pointer">${icon("camera")}${esc(t("Change photo"))}<input type="file" accept="image/*" data-change="pf-pic" hidden></label></div></div>
-  <div class="mt">${card(t("My information"), `<div class="list">${info.map(([l, v]) => row({ title: v, sub: esc(l) })).join("")}${row({ title: u.phone || "–", sub: esc(t("Phone")) })}${row({ title: u.addr || "–", sub: esc(t("Address")) })}${row({ title: u.bg || "–", sub: esc(t("Blood group")) })}${st ? row({ title: u.gname || "–", sub: esc(t("Guardian Name")) }) + row({ title: u.gphone || "–", sub: esc(t("Guardian's phone")) }) + row({ title: u.gem || "–", sub: esc(t("Guardian's email")) }) : ""}</div><div class="row mt">${btn(t("Edit"), "pf-edit", { ic: "edit" })}</div>`)}</div>
+  <div class="mt">${card(t("My information"), `<div class="list">${info.map(([l, v]) => row({ title: v, sub: esc(l) })).join("")}${row({ title: u.phone || "–", sub: esc(t("Phone")) })}${row({ title: u.addr || "–", sub: esc(t("Address")) })}${row({ title: u.bg || "–", sub: esc(t("Blood group")) })}${st ? row({ title: u.gname || "–", sub: esc(t("Guardian Name")) }) + row({ title: u.gphone || "–", sub: esc(t("Guardian's phone")) }) + row({ title: u.gem || "–", sub: esc(t("Guardian's email")) }) : ""}</div><div class="row mt">${btn(t("Edit"), "pf-edit", { ic: "edit" })}${u.role === "admin" ? btn(t("My ID card"), "id-show", { arg: S.pid, ic: "idcard" }) : ""}</div>`)}</div>
   <div class="mt">${card(t("Account"), `<div class="row">${btn(t("Change password"), "pf-pw", { ic: "key" })}${btn("English", "lang", { arg: "en", sm: true, kind: S.lang === "en" ? "pri" : "" })}${btn("বাংলা", "lang", { arg: "bn", sm: true, kind: S.lang === "bn" ? "pri" : "" })}${btn(t("Logout"), "logout", { ic: "logout", kind: "bad" })}</div>`)}</div>`;
 }, { title: "Profile" });
 
@@ -190,7 +195,7 @@ act("st-test", async () => {
 
 addBN({
   "Scan to verify": "যাচাই করতে স্ক্যান করুন",
-  "STUDENT ID CARD": "ছাত্র আইডি কার্ড", "TEACHER ID CARD": "শিক্ষক আইডি কার্ড", "Roll": "রোল", "Class": "ক্লাস", "Batch": "ব্যাচ", "Guardian Name": "অভিভাবকের নাম", "Guardian Phone": "অভিভাবকের ফোন", "ID": "আইডি", "Blood group": "রক্তের গ্রুপ", "Session": "সেশন",
+  "ADMIN ID CARD": "অ্যাডমিন আইডি কার্ড", "STUDENT ID CARD": "ছাত্র আইডি কার্ড", "TEACHER ID CARD": "শিক্ষক আইডি কার্ড", "Roll": "রোল", "Class": "ক্লাস", "Batch": "ব্যাচ", "Guardian Name": "অভিভাবকের নাম", "Guardian Phone": "অভিভাবকের ফোন", "ID": "আইডি", "Blood group": "রক্তের গ্রুপ", "Session": "সেশন",
   "This card is the property of {n}. It must be shown when asked.": "এই কার্ডটি {n} এর সম্পত্তি। চাইলে দেখাতে হবে।", "If found, please return it to the academy.": "পাওয়া গেলে দয়া করে একাডেমিতে ফেরত দিন।", "Phone": "ফোন", "Authorized signature": "অনুমোদিত স্বাক্ষর",
   "No students.": "কোনো ছাত্র নেই।", "Print / Save PDF": "প্রিন্ট / PDF সেভ", "Students": "ছাত্র", "Teachers": "শিক্ষক", "ID card": "আইডি কার্ড", "No teacher yet.": "এখনো কোনো শিক্ষক নেই।", "My ID card": "আমার আইডি কার্ড", "Print all cards of this batch": "এই ব্যাচের সব কার্ড প্রিন্ট করুন", "No students in this batch.": "এই ব্যাচে কোনো ছাত্র নেই।",
   "Login ID": "লগইন আইডি", "Role": "ভূমিকা", "School / college": "স্কুল / কলেজ", "Subject": "বিষয়", "Email": "ইমেইল", "Waiting for admin approval": "অ্যাডমিনের অনুমোদনের অপেক্ষায়", "Your account is created. The admin or a co-admin must approve it before you can open the other pages.": "আপনার অ্যাকাউন্ট তৈরি হয়েছে। অন্য পেজ খোলার আগে অ্যাডমিন বা কো-অ্যাডমিনকে অনুমোদন দিতে হবে।",
