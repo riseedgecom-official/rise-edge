@@ -2,7 +2,7 @@
 // Pages call these instead of touching the database directly for anything shared.
 import { db, withNewAccount, isEmailInUse, authEmail } from "./lib-db.js";
 import { S, T, t, lk, cmp, num, sleep } from "./lib-core.js";
-import { calcBatch, statRow, rollOf, rollPrefix, counterKey, defaultBatches, findBatch, hasBatch, classGroups, batchSpec, isGd, DEFAULT_FEE } from "./lib-stats.js";
+import { calcBatch, statRow, rollOf, ADMIN_ID, defaultBatches, findBatch, hasBatch, classGroups, batchSpec, isGd, DEFAULT_FEE } from "./lib-stats.js";
 
 export const active = (u) => u.active !== false && u.ap !== false;
 const byBatch = (a, b) => (+a.cls || 99) - (+b.cls || 99) || cmp(a.grp, b.grp) || cmp(a.name, b.name);
@@ -141,59 +141,80 @@ export async function getStats(bid) {
 
 // ---------- accounts ----------
 const tempPassword = () => Math.random().toString(36).slice(2, 8) + "A1";
-async function nextSerial(role, year) {
-  const pre = rollPrefix(role, year), key = counterKey(role, year);
-  let mx = 0;
-  [...S.U, ...S.TC, ...S.PEND].forEach((x) => { const v = String(x.roll || ""); if (v.startsWith(pre)) mx = Math.max(mx, +v.slice(pre.length) || 0); });
-  let c = 0;
-  try { const d = await db.get("cn/" + key); c = (d && d.n) || 0; } catch (e) { /* ignore */ }
-  return { n: Math.max(mx, c) + 1, key };
+const suffix4 = () => (Math.random().toString(36) + "0000").replace(/[^a-z0-9]/g, "").slice(0, 4);
+const isDenied = (e) => e && (e.code === "permission-denied" || /permission/i.test(String(e.message || "")));
+
+// ROLL NUMBERS. A roll number is the smallest free number of its kind and year: when an account is deleted its number is free again and
+// the next registration gets it. The admin's ID (ADMIN_ID) is never given to anybody else.
+// Which numbers are taken is read from the login documents (public: one per account) and from the loaded lists.
+async function takenRolls() {
+  const set = new Set();
+  try { (await db.list("login")).forEach((x) => set.add(String(x.id).toLowerCase())); } catch (e) { /* ignore */ }
+  [...S.U, ...S.TC, ...S.PEND].forEach((x) => { if (x && x.roll) set.add(String(x.roll).toLowerCase()); });
+  return set;
+}
+function nextFree(role, year, taken) {
+  for (let n = 1; n < 100000; n++) {
+    const roll = rollOf(role, year, n), k = roll.toLowerCase();
+    if (roll === ADMIN_ID || taken.has(k)) continue;
+    return n;
+  }
+  throw new Error("No roll number is free.");
+}
+// A login for this roll. The plain address (roll@rise.local) is used when it is free. When it is not - an earlier account with this roll
+// number was deleted, and a browser cannot delete a login that is not its own - the address gets a short random ending, so the number
+// can be used again. fn(uid, tdb, email) runs while signed in as the new login.
+async function openLogin(roll, pw, fn, plainOnly) {
+  const plain = authEmail(roll);
+  try { return await withNewAccount(plain, pw, (uid, tdb) => fn(uid, tdb, plain)); } catch (e) { if (!isEmailInUse(e) || plainOnly) throw e; }
+  const alias = String(roll).toLowerCase() + "." + suffix4() + "@rise.local";
+  return withNewAccount(alias, pw, (uid, tdb) => fn(uid, tdb, alias));
 }
 // Admin / co-admin adds a student or teacher. Returns {roll, pw, id}.
 export async function createAccount(role, data) {
-  const year = new Date().getFullYear(), pw = tempPassword();
-  const q = await nextSerial(role, year);
+  const year = new Date().getFullYear(), pw = tempPassword(), taken = await takenRolls();
   for (let i = 0; i < 30; i++) {
-    const n = q.n + i, roll = rollOf(role, year, n), key = roll.toLowerCase(), email = authEmail(roll);
+    const n = nextFree(role, year, taken), roll = rollOf(role, year, n), key = roll.toLowerCase();
+    taken.add(key);
     if (await db.get("login/" + key)) continue;
-    let uid;
-    try { uid = await withNewAccount(email, pw, async (u) => u); } catch (e) { if (isEmailInUse(e)) continue; throw e; }
+    const got = await openLogin(roll, pw, async (uid, tdb, email) => ({ uid, email }));
     await db.batch([
-      { set: ["users/" + uid, { ...data, role, roll, active: true, ap: true, mustChange: true, createdAt: Date.now() }] },
-      { set: ["login/" + key, { es: [email] }] },
-      { set: ["cn/" + q.key, { n }] },
+      { set: ["users/" + got.uid, { ...data, role, roll, active: true, ap: true, mustChange: true, createdAt: Date.now() }] },
+      { set: ["login/" + key, { es: [got.email] }] },
     ]);
-    return { roll, pw, id: uid };
+    return { roll, pw, id: got.uid };
   }
   throw new Error("Could not create a roll number. Please try again.");
 }
 
 // Student / teacher registers himself. The account exists at once but ap=false until approved.
 export async function selfRegister(d) {
-  const st = d.role === "student", year = new Date().getFullYear(), pre = rollPrefix(d.role, year), key = counterKey(d.role, year);
+  const st = d.role === "student", year = new Date().getFullYear();
   const open = await db.get("config/reg").catch(() => null);
   if (open && open.open === false) throw new Error("Registration is closed right now.");
-  let c = 0;
-  try { const x = await db.get("cn/" + key); c = (x && x.n) || 0; } catch (e) { /* ignore */ }
   let bid = "";
   if (st) { try { bid = (findBatch(await db.list("batches"), d.cls, d.grp, d.gd) || {}).id || ""; } catch (e) { /* ignore */ } }
   const base = st
     ? { role: "student", name: d.name, nick: d.nick || "", gphone: d.gphone || "", gem: d.gem || "", bid, cls: d.cls, school: d.school || "", grp: d.grp || "", ...(isGd(d.gd) ? { gd: d.gd } : {}), phone: d.phone, addr: d.addr || "", email: d.email }
     : { role: "teacher", name: d.name, nick: d.nick || "", subject: d.subject || "", cls: d.cls || "", phone: d.phone, addr: d.addr || "", email: d.email, bids: [] };
-  let n = c;
+  const taken = await takenRolls();
+  let plainOnly = false;   // set when the rules refuse the longer address: then only numbers that were never used are tried
   for (let i = 0; i < 40; i++) {
-    n++;
-    const roll = rollOf(d.role, year, n), lkKey = roll.toLowerCase(), email = authEmail(roll);
+    const n = nextFree(d.role, year, taken), roll = rollOf(d.role, year, n), lkKey = roll.toLowerCase();
+    taken.add(lkKey);
     if (await db.get("login/" + lkKey).catch(() => null)) continue;
     try {
-      await withNewAccount(email, d.pw, async (uid, tdb) => {
+      return await openLogin(roll, d.pw, async (uid, tdb, email) => {
+        await tdb.set("login/" + lkKey, { es: [email] });   // first: this claims the number (a login document that exists cannot be written again)
         await tdb.set("users/" + uid, { ...base, roll, active: true, mustChange: false, ap: false });
-        await tdb.set("login/" + lkKey, { es: [email] });
-        await tdb.set("cn/" + key, { n }).catch(() => {});
         await tdb.set("reg/" + timeId(), { role: d.role, name: d.name, phone: d.phone, email: d.email, roll, st: "auto", t: Date.now() }).catch(() => {});
-      });
-      return { roll, email, pw: d.pw };
-    } catch (e) { if (isEmailInUse(e)) continue; throw e; }
+        return { roll, email, pw: d.pw };
+      }, plainOnly);
+    } catch (e) {
+      if (isEmailInUse(e)) continue;
+      if (isDenied(e)) { plainOnly = true; continue; }   // somebody took the number a moment ago, or the old rules do not allow the longer address
+      throw e;
+    }
   }
   throw new Error("Could not create a roll number. Please try again.");
 }
@@ -229,12 +250,13 @@ export async function transferAdmin(toId) {
   const now = Date.now(), ops = [];
   const back = { role: "teacher", ca: true, active: true, ap: true, mustChange: false, bids: Array.isArray(from.bids) ? from.bids : [], pa: now };   // previous admin = co-admin
   if (!from.roll) {   // a teacher-style login ID, so the old admin can be listed, given a new password, and so on
-    const year = new Date().getFullYear(), q = await nextSerial("teacher", year);
+    const year = new Date().getFullYear(), taken = await takenRolls();
     for (let i = 0; i < 30; i++) {
-      const n = q.n + i, roll = rollOf("teacher", year, n), key = roll.toLowerCase();
+      const n = nextFree("teacher", year, taken), roll = rollOf("teacher", year, n), key = roll.toLowerCase();
+      taken.add(key);
       if (await db.get("login/" + key)) continue;
       back.roll = roll;
-      ops.push({ set: ["login/" + key, { es: [from.email || authEmail(roll)] }] }, { set: ["cn/" + q.key, { n }] });
+      ops.push({ set: ["login/" + key, { es: [from.email || authEmail(roll)] }] });
       break;
     }
   }
@@ -250,6 +272,9 @@ export async function transferAdmin(toId) {
   return { toName: to.name || "", wasCo: to.ca === true };
 }
 
+// Deleting a person: the profile, the login and everything that belongs to the person. The roll number is free again afterwards (see nextFree),
+// and whoever gets it next starts with nothing. The profile and login go first (that is what must happen); the rest is cleaned up one
+// collection at a time, so a co-admin, who may not touch fees, still deletes the person and only the fee records stay behind.
 export async function removeUser(u) {
   const ops = [{ del: "users/" + u.id }];
   if (u.roll) ops.push({ del: "login/" + String(u.roll).toLowerCase() });
@@ -258,6 +283,57 @@ export async function removeUser(u) {
     try { (await db.list("users/" + u.id + "/" + sub)).forEach((x) => ops.push({ del: "users/" + u.id + "/" + sub + "/" + x.id })); } catch (e) { /* ignore */ }
   }
   await db.batch(ops);
+  await purgeUserData(u);
+}
+async function purgeUserData(u) {
+  const id = u.id, bid = u.bid, roll = u.roll;
+  const step = async (fn) => { try { await fn(); } catch (e) { /* not allowed or not there: go on with the rest */ } };
+  const wipe = (col, field, val) => step(async () => {
+    const L = await db.list(col, [field, "==", val]);
+    if (L.length) await db.batch(L.map((x) => ({ del: col + "/" + x.id })));
+    return L;
+  });
+  // records that point at the person
+  await step(async () => { const R = await db.list("pr", ["sid", "==", id]); if (R.length) await db.batch([...R.map((x) => ({ del: "pi/" + x.id })), ...R.map((x) => ({ del: "pr/" + x.id }))]); });
+  for (const [col, f] of [["pay", "sid"], ["sf", "sid"], ["rq", "sid"], ["pf", "sid"], ["nt", "to"], ["sal", "tid"]]) await wipe(col, f, id);
+  await step(() => db.del("ms/" + id));
+  if (roll) { await wipe("fp", "roll", roll); await wipe("reg", "roll", roll); }
+  // marks, attendance and so on inside the documents of the class
+  if (bid) {
+    await step(async () => {
+      for (const a of await db.list("att", ["bid", "==", bid])) {
+        const A = (a.A || []).filter((x) => x !== id), E = (a.E || []).filter((x) => x !== id);
+        if (A.length !== (a.A || []).length || E.length !== (a.E || []).length) await db.upd("att/" + a.id, { A, E });
+      }
+    });
+    await step(async () => {
+      for (const e of await db.list("exams", ["bid", "==", bid])) {
+        let hit = false;
+        const subs = (e.subs || []).map((x) => { const y = { ...x }; if (y.m && id in y.m) { y.m = { ...y.m }; delete y.m[id]; hit = true; } if (y.dm && id in y.dm) { y.dm = { ...y.dm }; delete y.dm[id]; hit = true; } return y; });
+        if (hit) await db.upd("exams/" + e.id, { subs });
+      }
+    });
+    await step(async () => {
+      for (const a of await db.list("pa", ["bid", "==", bid])) if (a.m && id in a.m) { const m = { ...a.m }; delete m[id]; await db.upd("pa/" + a.id, { m }); }
+    });
+    await step(async () => {
+      for (const r of await db.list("rep", ["bid", "==", bid])) if (r.c && id in r.c) { const c = { ...r.c }; delete c[id]; await db.upd("rep/" + r.id, { c }); }
+    });
+    await step(async () => {   // the monthly top students poster
+      for (const y of await db.list("yr", ["bid", "==", bid])) { const top = (y.top || []).filter((x) => x.id !== id); if (top.length !== (y.top || []).length) await db.upd("yr/" + y.id, { top }); }
+    });
+    await step(async () => {
+      const b = await db.get("bstat/" + bid);
+      if (b && b.rows && id in b.rows) { const rows = { ...b.rows }; delete rows[id]; await db.set("bstat/" + bid, { ...b, rows, n: Object.keys(rows).length }); }
+    });
+    if (roll) await step(async () => {
+      for (const r of await db.list("records", ["bid", "==", bid])) {
+        const rows = (r.rows || []).filter((x) => x.roll !== roll);
+        if (rows.length !== (r.rows || []).length) await db.upd("records/" + r.id, { rows });
+      }
+    });
+    dropBatchCache(bid);
+  }
 }
 
 // ---------- institute settings + mail ----------

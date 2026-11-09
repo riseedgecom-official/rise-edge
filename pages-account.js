@@ -8,6 +8,7 @@ import { icon, avatar, tag, empty, notice, card, row, btn, chips, input, textare
 import { reloadMe, saveInst, squarePhoto, mailCfg, sendMail } from "./lib-svc.js";
 import { qrSvg, qrMatrix } from "./lib-qr.js";
 import { fitLink } from "./lib-idq.js";
+import { ADMIN_ID } from "./lib-stats.js";
 
 const BLOOD = ["", "A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"];
 const phoneOk = (v) => !v || /^01\d{9}$/.test(String(v).replace(/[\s-]/g, ""));
@@ -21,8 +22,8 @@ const clsText = (u) => {
 // The card background is an SVG drawn inside the card (not a CSS background), so the gradients and shapes also print when the
 // browser's "background graphics" option is off. Colours come from the logo: deep navy, electric blue, gold.
 let bgN = 0;
-function idBg(back) {
-  const k = "idb" + ++bgN, yl = back ? 168 : 204, yr = back ? 138 : 168, fl = back ? 500 : 490, fr = back ? 488 : 478;
+function idBg(back, pro) {
+  const k = "idb" + ++bgN, tall = back || pro, yl = tall ? 238 : 204, yr = tall ? 170 : 168, fl = back ? 496 : 490, fr = back ? 486 : 478;
   const dots = []; for (let x = 232; x <= 320; x += 14) for (let y = 22; y <= 64; y += 14) dots.push(`<circle cx="${x}" cy="${y}" r="1.5"/>`);
   const hex = (cx, cy, r) => [0, 1, 2, 3, 4, 5].map((i) => (cx + r * Math.cos(Math.PI / 3 * i + Math.PI / 6)).toFixed(1) + "," + (cy + r * Math.sin(Math.PI / 3 * i + Math.PI / 6)).toFixed(1)).join(" ");
   return `<svg class="idc-bg" viewBox="0 0 340 540" preserveAspectRatio="none" aria-hidden="true"><defs>
@@ -31,11 +32,11 @@ function idBg(back) {
     <linearGradient id="${k}p" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="540"><stop offset="0" stop-color="#ffffff"/><stop offset=".6" stop-color="#f1f6ff"/><stop offset="1" stop-color="#dfeaff"/></linearGradient>
     <linearGradient id="${k}f" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="340" y2="0"><stop offset="0" stop-color="#050b1f"/><stop offset="1" stop-color="#0d3c9c"/></linearGradient></defs>
     <rect width="340" height="540" fill="url(#${k}p)"/>
-    <g fill="none" stroke="#1469e8" stroke-opacity=".08" stroke-width="1.6"><polygon points="${hex(296, 300, 46)}"/><polygon points="${hex(318, 352, 30)}"/><polygon points="${hex(40, back ? 330 : 470, 38)}"/></g>
-    <circle cx="14" cy="${back ? 300 : 440}" r="72" fill="#f2b01e" fill-opacity=".08"/><polygon points="340,${back ? 200 : 236} 340,${back ? 300 : 340} 250,${back ? 300 : 340}" fill="#1469e8" fill-opacity=".05"/>
+    <g fill="none" stroke="#1469e8" stroke-opacity=".08" stroke-width="1.6"><polygon points="${hex(296, 300, 46)}"/><polygon points="${hex(318, 352, 30)}"/><polygon points="${hex(40, tall ? 330 : 470, 38)}"/></g>
+    <circle cx="14" cy="${tall ? 330 : 440}" r="72" fill="#f2b01e" fill-opacity=".1"/><polygon points="340,${tall ? 236 : 236} 340,${tall ? 340 : 340} 250,${tall ? 340 : 340}" fill="#1469e8" fill-opacity=".05"/>
     <path d="M0 0H340V${yr}L0 ${yl}Z" fill="url(#${k}h)"/>
     <circle cx="310" cy="14" r="76" fill="#fff" fill-opacity=".06"/><circle cx="310" cy="14" r="50" fill="none" stroke="#ffd36b" stroke-opacity=".4" stroke-width="1.4"/><polygon points="0,0 96,0 0,96" fill="#2f86ff" fill-opacity=".28"/>
-    <polygon points="${hex(36, back ? 120 : 160, 22)}" fill="none" stroke="#ffd36b" stroke-opacity=".45" stroke-width="1.4"/><g fill="#fff" fill-opacity=".35">${dots.join("")}</g>
+    <polygon points="${hex(36, tall ? 190 : 160, 24)}" fill="none" stroke="#ffd36b" stroke-opacity=".45" stroke-width="1.4"/><g fill="#fff" fill-opacity=".35">${dots.join("")}</g>
     <path d="M0 ${yl}L340 ${yr}V${yr + 7}L0 ${yl + 7}Z" fill="url(#${k}g)"/><path d="M0 ${yl + 12}L340 ${yr + 12}" stroke="#2f86ff" stroke-opacity=".55" stroke-width="1.5"/>
     <path d="M0 540V${fl}L340 ${fr}V540Z" fill="url(#${k}f)"/><path d="M0 ${fl}L340 ${fr}" stroke="url(#${k}g)" stroke-width="3"/>
     <rect x="10" y="10" width="320" height="520" rx="14" fill="none" stroke="#2f86ff" stroke-width="2.5"/><rect x="15.5" y="15.5" width="309" height="509" rx="10" fill="none" stroke="#f2b01e" stroke-opacity=".75" stroke-width="1"/>
@@ -43,42 +44,60 @@ function idBg(back) {
 }
 // What the card's QR holds: a link to verify.html with what is printed on the card (see lib-idq.js).
 // If that is too long for one QR it says less; as a last resort the QR is just the ID.
-// The admin has no roll number, so the card shows ADMIN as the ID.
+// The admin's card always shows ADMIN_ID (REAT-2026-001), whatever the admin's own login is.
 const cardKind = (u) => (u.role === "student" ? "S" : u.role === "admin" ? "A" : "T");
-const idOf = (u) => u.roll || (u.role === "admin" ? "ADMIN" : u.id);
+const idOf = (u) => (u.role === "admin" ? ADMIN_ID : u.roll || u.id);
+const yearOf = (u) => (String(idOf(u)).match(/-(\d{4})-/) || [])[1] || "";
+const signName = () => S.INST.owner || "Noman Islam Raj";
 function idQrText(u) {
   const st = u.role === "student", ad = u.role === "admin", b = batchOf(u.bid) || {}, c0 = u.cls || b.cls, g = u.grp || b.grp;
-  const card = { k: cardKind(u), id: idOf(u), name: u.name, a: st ? (c0 ? "Class " + c0 + (g ? " · " + g : "") : "") : ad ? "Admin" : (u.subject || ""), b: st ? (b.name || "") : "", y: (String(u.roll || "").match(/-(\d{4})-/) || [])[1] || "" };
+  const card = { k: cardKind(u), id: idOf(u), name: u.name, a: st ? (c0 ? "Class " + c0 + (g ? " · " + g : "") : "") : ad ? "Admin" : (u.subject || ""), b: st ? (b.name || "") : "", y: yearOf(u) };
   const fits = (l) => { try { qrMatrix(l); return true; } catch (e) { return false; } };
   return fitLink(new URL("verify.html", location.href).href, card, fits) || String(idOf(u));
 }
+// Student: photo and QR on the left, the details on the right.
+// Teacher and admin: a big photo in the middle and the details in boxes; their QR is on the back.
 function frontHtml(u) {
   const st = u.role === "student", ad = u.role === "admin", b = batchOf(u.bid) || {};
-  const rows = st
-    ? [[t("Name"), u.name], [t("Roll"), u.roll], [t("Class"), clsText(u)], [t("Batch"), b.name || "–"], [t("Guardian Name"), u.gname || "–"], [t("Guardian Phone"), u.gphone || "–"]]
-    : ad ? [[t("Name"), u.name], [t("ID"), idOf(u)], [t("Role"), t("Admin")], [t("Phone"), u.phone || "–"], [t("Blood group"), u.bg || "–"]]
-    : [[t("Name"), u.name], [t("ID"), u.roll], [t("Subject"), u.subject || "–"], [t("Phone"), u.phone || "–"], [t("Blood group"), u.bg || "–"]];
-  const yr = (String(u.roll || "").match(/-(\d{4})-/) || [])[1] || "";
+  const yr = yearOf(u);
+  if (!st) {
+    const subj = u.subject || "–", phone = u.phone || "–", bg = u.bg || "–";
+    const bx = (l, v, c = "") => `<div class="idc-bx ${c}"><small>${esc(l)}</small><b>${esc(v)}</b></div>`;
+    return `<div class="idc idc--pro">${idBg(false, true)}<div class="idc-in">
+      <img class="idc-logo idc-logo--lg" src="logo.jpg" alt="">
+      <div class="idc-name idc-name--lg">${esc(instName().toUpperCase())}</div>
+      <div class="idc-role idc-role--lg">${esc(ad ? t("ADMIN ID CARD") : t("TEACHER ID CARD"))}</div>
+      <div class="idc-ph">${u.pic ? `<img src="${esc(u.pic)}" alt="">` : esc([...(u.name || "?")][0])}</div>
+      <div class="idc-bxs">${bx(t("Name").toUpperCase(), u.name, String(u.name || "").length > 26 ? "idc-bx--s" : "")}
+        <div class="idc-bx2">${bx(t("ID"), idOf(u))}${bx(t("Blood group").replace("group", "Group"), bg)}</div>
+        ${ad ? bx(t("Phone"), phone) : `<div class="idc-bx2">${bx(t("Subject"), subj, String(subj).length > 14 ? "idc-bx--s" : "")}${bx(t("Phone"), phone)}</div>`}</div>
+      <div class="idc-foot idc-foot--end"><span>${esc(yr ? t("Session") + ": " + yr : "")}</span></div></div></div>`;
+  }
+  const rows = [[t("Name"), u.name], [t("Roll"), u.roll], [t("Class"), clsText(u)], [t("Batch"), b.name || "–"], [t("Guardian Name"), u.gname || "–"], [t("Guardian Phone"), u.gphone || "–"]];
   return `<div class="idc">${idBg(false)}<div class="idc-in">
     <img class="idc-logo" src="logo.jpg" alt="">
     <div class="idc-name">${esc(instName().toUpperCase())}</div>
     <div class="idc-tag">${esc(S.INST.tag || t("Student, teacher and admin portal"))}</div>
-    <div class="idc-role">${esc(st ? t("STUDENT ID CARD") : ad ? t("ADMIN ID CARD") : t("TEACHER ID CARD"))}</div>
+    <div class="idc-role">${esc(t("STUDENT ID CARD"))}</div>
     <div class="idc-main"><div class="idc-l"><div class="idc-photo">${u.pic ? `<img src="${esc(u.pic)}" alt="">` : esc([...(u.name || "?")][0])}</div><div class="idc-qr">${qrSvg(idQrText(u), { margin: 0 })}</div><div class="idc-scan">${esc(t("Scan to verify"))}</div></div>
       <div class="idc-r">${rows.map(([l, v]) => `<div class="idc-f${String(v).length > 34 ? " idc-f--xs" : String(v).length > 22 ? " idc-f--s" : ""}"><small>${esc(l)}</small><b>${esc(v)}</b></div>`).join("")}</div></div>
     <div class="idc-foot"><span>${esc(S.INST.phone || "")}</span><span>${esc(yr ? t("Session") + " " + yr : "")}</span></div></div></div>`;
 }
+// The back is the same for everybody: the notice, then the QR (teacher / admin; a student's QR is on the front, so a student gets the academy's
+// contact details here), the signature with the name under it, and the ID in the corner.
 function backHtml(u) {
-  return `<div class="idc idc--back">${idBg(true)}<div class="idc-in">
-    <img class="idc-logo" src="logo.jpg" alt="">
-    <div class="idc-name">${esc(instName().toUpperCase())}</div>
+  const st = u.role === "student";
+  const mid = st
+    ? `<div class="idc-qrb idc-qrb--info">${S.INST.phone ? `<p><small>${esc(t("Phone"))}</small><b>${esc(S.INST.phone)}</b></p>` : ""}${S.INST.addr ? `<p><small>${esc(t("Address"))}</small><b>${esc(S.INST.addr)}</b></p>` : ""}${u.bg ? `<p><small>${esc(t("Blood group"))}</small><b>${esc(u.bg)}</b></p>` : ""}</div>`
+    : `<div class="idc-qrb">${qrSvg(idQrText(u), { margin: 0 })}</div>`;
+  return `<div class="idc idc--back">${idBg(true)}<div class="idc-in idc-in--back">
     <div class="idc-bk">
-    <p>${esc(t("This card is the property of {n}. It must be shown when asked.", { n: instName() }))}</p>
-    <p>${esc(t("If found, please return it to the academy."))}</p>
-    ${S.INST.addr ? `<p><b>${esc(S.INST.addr)}</b></p>` : ""}${S.INST.phone ? `<p><b>${esc(t("Phone"))}: ${esc(S.INST.phone)}</b></p>` : ""}
-    ${u.bg ? `<p>${esc(t("Blood group"))}: <b>${esc(u.bg)}</b></p>` : ""}
-    <div class="idc-sign">${esc(S.INST.owner || t("Authorized signature"))}</div></div>
-    <div class="idc-foot"><span></span><span>${esc(S.INST.tag || "")}</span></div></div></div>`;
+      <p>${esc(t("This card is the property of {n}. It must be shown when asked.", { n: instName() }))}</p>
+      <i class="idc-gold"></i>
+      <p>${esc(t("If found, please return it to the academy."))}</p></div>
+    ${mid}
+    <div class="idc-sg"><img src="sign.webp" alt=""><i></i><b>${esc(signName())}</b></div>
+    <div class="idc-idb">${esc("ID: " + idOf(u))}</div></div></div>`;
 }
 const sheet = (list, backs = true) => `<div class="idc-sheet">${list.map((u) => frontHtml(u) + (backs ? backHtml(u) : "")).join("")}</div>`;
 export function showIdCard(u) { showDoc(sheet([u]), { title: u.name }); }

@@ -45,7 +45,8 @@ service cloud.firestore {
     }
     match /login/{id} {   // roll -> login email(s)
       allow read: if true;
-      allow create: if request.auth != null && regOpen() && request.auth.token.email == id + '@rise.local' && request.resource.data.keys().hasOnly(['es']) && request.resource.data.es == [request.auth.token.email];
+      // the login address is roll@rise.local, or roll.xxxx@rise.local when that roll number belongs to an account that was deleted and is used again
+      allow create: if request.auth != null && regOpen() && id != 'reat-2026-001' && id.matches('rea[st]-[0-9]{4}-[0-9]{3,6}') && request.auth.token.email.matches(id + '([.][a-z0-9]{4})?@rise[.]local') && request.resource.data.keys().hasOnly(['es']) && request.resource.data.es == [request.auth.token.email];
     }
     // After a password reset a new login points at the old profile. A co-admin may do that, but never for the admin's profile or login.
     function notAdminProfile(p) { return !exists(/databases/$(d)/documents/users/$(p)) || get(/databases/$(d)/documents/users/$(p)).data.role != 'admin'; }
@@ -69,7 +70,7 @@ service cloud.firestore {
       allow read: if request.auth != null && sid() == id;
       allow read: if tch(resource.data.bid);
       allow create: if request.auth != null && sid() == id && fresh() && request.resource.data.role == 'admin';   // first admin
-      allow create: if request.auth != null && request.auth.uid == id && regOpen() && (selfStu(request.resource.data) || selfTch(request.resource.data)) && request.auth.token.email == request.resource.data.roll.lower() + '@rise.local';
+      allow create: if request.auth != null && request.auth.uid == id && regOpen() && (selfStu(request.resource.data) || selfTch(request.resource.data)) && request.auth.token.email.matches(request.resource.data.roll.lower() + '([.][a-z0-9]{4})?@rise[.]local') && request.resource.data.roll != 'REAT-2026-001';
       allow update: if request.auth != null && sid() == id && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['mustChange', 'pic', 'phone', 'addr', 'gname', 'gphone', 'bg', 'name', 'gem']);
     }
     match /batches/{id} {

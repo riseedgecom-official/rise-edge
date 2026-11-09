@@ -167,6 +167,8 @@ export const manualDue = (list) => n2((list || []).reduce((a, f) => a + manualSt
 export const rollPrefix = (role, year) => "REA" + (role === "student" ? "S" : "T") + "-" + year + "-";
 export const rollOf = (role, year, n) => rollPrefix(role, year) + String(n).padStart(3, "0");
 export const counterKey = (role, year) => (role === "student" ? "S" : "T") + year;
+// The admin's ID is always this, whoever the admin is. It is never given to anybody else.
+export const ADMIN_ID = "REAT-2026-001";
 
 // ---------- ready-made batches ----------
 // A batch belongs to a class (+ group for class 9-12) and may be for Boys ("M"), Girls ("F") or everybody ("" = mixed, the old kind).

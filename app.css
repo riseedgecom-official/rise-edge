@@ -407,10 +407,6 @@ table.tbl{width:100%;border-collapse:collapse;font-size:14px}
 .idc-sheet{display:flex;flex-wrap:wrap;gap:16px;justify-content:center;padding:8px 0}
 .idc-sheet .idc{break-inside:avoid;page-break-inside:avoid}
 @media print{.idc-sheet{gap:10px;justify-content:flex-start}.idc{box-shadow:none;border:1px solid #cdd8ee}.idc,.idc *{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-.idc--back .idc-in{text-align:center}
-.idc-bk{margin-top:46px;width:100%;flex:1;display:flex;flex-direction:column;align-items:center}
-.idc--back p{font-size:12px;margin:0 0 6px;color:#0a1636}
-.idc-sign{margin-top:auto;margin-bottom:22px;border-top:1.5px solid #0a1636;padding-top:4px;font-size:11px;font-weight:700;min-width:160px}
 
 /* ---------- misc ---------- */
 .loading{display:grid;place-items:center;gap:14px;padding:90px 0;text-align:center}
@@ -517,3 +513,35 @@ table.tbl{width:100%;border-collapse:collapse;font-size:14px}
 .ab-name:focus-visible{outline:3px solid color-mix(in srgb,var(--blue) 55%,transparent);outline-offset:2px;border-radius:4px}
 .check--all{padding-bottom:8px;margin-bottom:6px;border-bottom:1px dashed var(--line)}
 .check--all b{font-weight:800}
+/* teacher / admin card: big photo in the middle, details in boxes; the QR is on the back */
+.idc--pro .idc-in{inset:18px 24px 14px;gap:0}
+.idc--pro .idc-logo{margin-top:6px}
+.idc-logo--lg{width:90px;height:90px;box-shadow:0 0 0 4px #f2b01e,0 0 0 7px rgba(255,255,255,.18),0 6px 14px rgba(0,0,0,.4)}
+.idc-name--lg{font-size:20px;margin-top:12px;letter-spacing:.03em;line-height:1.1}
+.idc-role--lg{font-size:14.5px;padding:5px 26px;margin-top:7px;line-height:1.2}
+.idc-ph{width:148px;height:148px;margin-top:13px;border:4px solid #f2b01e;border-radius:18px;overflow:hidden;background:#eaf0fb;display:grid;place-items:center;font-size:56px;font-weight:800;color:#1469e8;box-shadow:0 0 0 4px #fff,0 0 0 7px #1469e8,0 6px 14px rgba(10,22,54,.3);flex:none}
+.idc-ph img{width:100%;height:100%;object-fit:cover}
+.idc-bxs{width:100%;display:flex;flex-direction:column;gap:5px;margin-top:15px}
+.idc-bx2{display:flex;gap:6px}
+.idc-bx{flex:1;min-width:0;border:1.5px solid rgba(47,134,255,.5);background:rgba(255,255,255,.8);border-radius:12px;text-align:center;padding:3px 8px 4px}
+.idc-bx small{display:block;font-size:10.5px;font-weight:800;color:#1469e8;line-height:1.15}
+.idc-bx b{display:block;font-size:14.5px;font-weight:800;color:#0a1636;line-height:1.2;overflow-wrap:anywhere}
+.idc-bxs>.idc-bx b{font-size:17px}
+.idc-bx--s b,.idc-bxs>.idc-bx.idc-bx--s b{font-size:12.5px}
+.idc-foot--end{justify-content:flex-end;font-size:13px;padding-bottom:5px}
+/* the back, the same for everybody */
+.idc--back .idc-in--back{position:absolute;inset:0;display:block;padding:0}
+.idc-bk{position:absolute;left:32px;right:32px;top:90px;text-align:center}
+.idc-bk p{margin:0;font-size:11.8px;line-height:1.45;font-weight:600;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35)}
+.idc-gold{display:block;height:2px;width:74%;margin:8px auto;background:linear-gradient(90deg,transparent,#f2b01e 12%,#f2b01e 88%,transparent)}
+.idc-qrb{position:absolute;left:50%;top:196px;width:152px;height:152px;margin-left:-76px;box-sizing:border-box;background:#fff;border:4px solid #1469e8;border-radius:20px;padding:14px;box-shadow:inset 0 0 0 3px #f2b01e,0 6px 16px rgba(10,22,54,.28)}
+.idc-qrb svg,.idc-qrb img{width:100%;height:100%;display:block}
+.idc-qrb--info{width:240px;margin-left:-120px;height:auto;min-height:152px;max-height:164px;padding:12px 16px;display:flex;flex-direction:column;justify-content:center;gap:7px;text-align:center;overflow:hidden}
+.idc-qrb--info p{margin:0}
+.idc-qrb--info small{display:block;font-size:10px;font-weight:800;color:#1469e8;line-height:1.1}
+.idc-qrb--info b{display:block;font-size:12.5px;color:#0a1636;line-height:1.3;overflow-wrap:anywhere}
+.idc-sg{position:absolute;left:50%;top:356px;width:190px;margin-left:-95px;text-align:center}
+.idc-sg img{display:block;height:74px;width:auto;margin:0 auto}
+.idc-sg i{display:block;height:1.5px;background:#0a2a6b;margin-top:3px}
+.idc-sg b{display:block;margin-top:6px;font-size:14px;font-weight:800;color:#0a2a6b;line-height:1.2}
+.idc-idb{position:absolute;right:10px;bottom:10px;background:linear-gradient(90deg,#050b1f,#0d3c9c);color:#fff;font-weight:800;font-size:13px;letter-spacing:.02em;padding:9px 16px 9px 22px;border-top:2.5px solid #f2b01e;border-left:2.5px solid #f2b01e;border-top-left-radius:22px;border-bottom-right-radius:12px}
