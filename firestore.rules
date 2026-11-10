@@ -26,6 +26,9 @@ service cloud.firestore {
     function selfStu(u) { return selfCommon(u) && u.role == 'student' && u.keys().hasOnly(['role', 'name', 'nick', 'roll', 'bid', 'cls', 'school', 'grp', 'gd', 'phone', 'addr', 'email', 'gphone', 'gem', 'active', 'mustChange', 'ap']) && u.ap == false && u.roll is string && u.roll.matches('REAS-[0-9]{4}-[0-9]{3,6}') && (u.bid == '' || (exists(/databases/$(d)/documents/batches/$(u.bid)) && get(/databases/$(d)/documents/batches/$(u.bid)).data.get('cls', '') == u.get('cls', '') && get(/databases/$(d)/documents/batches/$(u.bid)).data.get('grp', '') == u.get('grp', '') && get(/databases/$(d)/documents/batches/$(u.bid)).data.get('gd', '') in ['', u.get('gd', '')])) && u.get('gd', '') in ['', 'M', 'F'] && u.get('cls', '') in ['', '4', '5', '6', '7', '8', '9', '10', '11', '12'] && u.get('grp', '') in ['', 'Science', 'Commerce', 'Arts'] && ss(u, 'school') && ss(u, 'gphone') && ss(u, 'gem'); }
     function selfTch(u) { return selfCommon(u) && u.role == 'teacher' && u.keys().hasOnly(['role', 'name', 'nick', 'roll', 'subject', 'phone', 'addr', 'email', 'bids', 'cls', 'active', 'mustChange', 'ap']) && u.ap == false && u.roll is string && u.roll.matches('REAT-[0-9]{4}-[0-9]{3,6}') && u.bids is list && u.bids.size() == 0 && ss(u, 'subject') && ss(u, 'cls'); }
 
+    // ---------- a teacher adds a student to one of HIS OWN batches (a new account made by the teacher; the student gets the ID and a temporary password from him) ----------
+    function tchAdd(u) { return u.role == 'student' && tch(u.get('bid', '')) && u.ap == true && u.active == true && u.mustChange == true && u.name is string && u.name.size() > 0 && u.name.size() < 100 && u.roll is string && u.roll.matches('REAS-[0-9]{4}-[0-9]{3,6}') && u.keys().hasOnly(['role', 'name', 'nick', 'roll', 'bid', 'cls', 'school', 'grp', 'gd', 'phone', 'addr', 'email', 'gphone', 'gem', 'gname', 'active', 'mustChange', 'ap', 'createdAt']) && u.get('gd', '') in ['', 'M', 'F'] && u.get('cls', '') in ['', '4', '5', '6', '7', '8', '9', '10', '11', '12'] && u.get('grp', '') in ['', 'Science', 'Commerce', 'Arts'] && ss(u, 'nick') && ss(u, 'phone') && ss(u, 'addr') && ss(u, 'email') && ss(u, 'school') && ss(u, 'gphone') && ss(u, 'gem') && ss(u, 'gname'); }
+
     // ---------- admin: everything. co-admin: everything except these ----------
     // (config and map have their own rules below; sf = extra fees, xfer = admin transfer history: admin only)
     match /{c}/{id} {
@@ -47,6 +50,8 @@ service cloud.firestore {
       allow read: if true;
       // the login address is roll@rise.local, or roll.xxxx@rise.local when that roll number belongs to an account that was deleted and is used again
       allow create: if request.auth != null && regOpen() && id != 'reat-2026-001' && id.matches('rea[st]-[0-9]{4}-[0-9]{3,6}') && request.auth.token.email.matches(id + '([.][a-z0-9]{4})?@rise[.]local') && request.resource.data.keys().hasOnly(['es']) && request.resource.data.es == [request.auth.token.email];
+      // a teacher who adds a student writes the student's lookup (a student number only, create-only, the address must be that number's)
+      allow create: if request.auth != null && me().role == 'teacher' && me().get('ap', true) != false && me().get('active', true) != false && id.matches('reas-[0-9]{4}-[0-9]{3,6}') && request.resource.data.keys().hasOnly(['es']) && request.resource.data.es is list && request.resource.data.es.size() == 1 && request.resource.data.es[0] is string && request.resource.data.es[0].matches(id + '([.][a-z0-9]{4})?@rise[.]local');
     }
     // After a password reset a new login points at the old profile. A co-admin may do that, but never for the admin's profile or login.
     function notAdminProfile(p) { return !exists(/databases/$(d)/documents/users/$(p)) || get(/databases/$(d)/documents/users/$(p)).data.role != 'admin'; }
@@ -65,6 +70,7 @@ service cloud.firestore {
     match /users/{id} {
       allow read: if cadm();
       allow create: if cadm() && request.resource.data.role in ['student', 'teacher'] && request.resource.data.get('ca', false) == false && request.resource.data.get('fo', 0) == 0 && !('fm' in request.resource.data);
+      allow create: if tchAdd(request.resource.data);
       allow delete: if cadm() && resource.data.role in ['student', 'teacher'] && resource.data.get('ca', false) == false;
       allow update: if cadm() && resource.data.role != 'admin' && request.resource.data.role == resource.data.role && request.resource.data.get('ca', false) == resource.data.get('ca', false) && request.resource.data.get('fo', 0) == resource.data.get('fo', 0) && request.resource.data.get('fm', '') == resource.data.get('fm', '') && request.resource.data.get('createdAt', 0) == resource.data.get('createdAt', 0);
       allow read: if request.auth != null && sid() == id;

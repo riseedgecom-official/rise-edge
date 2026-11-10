@@ -8,7 +8,7 @@ import {
   icon, avatar, tag, empty, notice, card, row, btn, chips, input, select, field, clsOptions, grpOptions, grpLabel,
   gdOptions, gdLabel, batchGdOptions, batchGdLabel, modal, ask, form, toast, closeModals,
 } from "./lib-ui.js";
-import { createAccount, resetPassword, removeUser, reloadPeople, recalcBatch, sendMail, logAct, monthStart, ensureGenderBatches } from "./lib-svc.js";
+import { createAccount, resetPassword, removeUser, reloadPeople, recalcBatch, sendMail, logAct, notify, monthStart, ensureGenderBatches } from "./lib-svc.js";
 import { findBatch, subjectsFor, feeStart, isMonth, batchTitle, isGd } from "./lib-stats.js";
 
 const MAX_CO = 5;
@@ -99,6 +99,36 @@ act("stu-add", async () => {
   await reload(made.bid);
   showLogin(made.u, made.r.roll, made.r.pw, t("Student added"));
 });
+
+// ---------- teacher: add a student to one of HIS OWN batches ----------
+// Same as the admin's Add student (a new account with a login ID and a temporary password), but the batch is chosen from the
+// teacher's own batches only (S.B is just those); class / group come from the batch. The teacher then gives the ID and password to the student.
+const tchAddFields = () => `${select("bid", S.B.map((b) => [b.id, b.name]), S.B[0] ? S.B[0].id : "", { label: t("Batch") })}
+  ${input("name", { label: t("Full name") })}${input("nick", { label: t("Nickname") })}
+  ${select("gd", gdOptions(), "", { label: t("Gender"), hint: t("Leave empty for a Boys or Girls batch: the batch decides.") })}
+  ${input("school", { label: t("School / college") })}${input("phone", { label: t("Phone"), type: "tel", placeholder: "01XXXXXXXXX" })}
+  ${input("gname", { label: t("Guardian name") })}${input("gphone", { label: t("Guardian's phone"), type: "tel", placeholder: "01XXXXXXXXX" })}${input("gem", { label: t("Guardian's email"), type: "email" })}
+  ${input("addr", { label: t("Address") })}${input("email", { label: t("Email"), type: "email" })}`;
+export async function teacherAddStudent() {
+  if (!S.B.length) return toast(t("No batch assigned yet."), "bad");
+  let made = null;
+  await form(t("Add student"), tchAddFields(), {
+    validate: (d) => {
+      const b = S.B.find((x) => x.id === d.bid);
+      return !b ? t("Choose the batch.") : !String(d.name || "").trim() ? t("Enter the name.") : isGd(d.gd) && isGd(b.gd) && d.gd !== b.gd ? t("This batch is for {w} only.", { w: batchGdLabel(b.gd) }) : "";
+    },
+    onSave: async (d) => {
+      const b = S.B.find((x) => x.id === d.bid);
+      if (!b) throw new Error(t("Choose the batch."));   // only his own batches
+      const x = cleanData({ ...d, cls: b.cls || "", grp: b.grp || "", gd: isGd(d.gd) ? d.gd : b.gd || "" }, "student");
+      made = { u: { ...x, role: "student" }, r: await createAccount("student", { ...x, bid: b.id }), b };
+    },
+  });
+  if (!made) return;
+  notify("admin", S.me.name + ": Added student " + made.u.name + " (" + made.r.roll + ") - " + made.b.name, made.b.id);
+  await reload(made.b.id);
+  showLogin(made.u, made.r.roll, made.r.pw, t("Student added"));
+}
 
 // ---------- profile popup ----------
 act("open-user", (el) => {
@@ -417,6 +447,7 @@ addBN({
   "Registration open": "রেজিস্ট্রেশন চালু", "Registration closed": "রেজিস্ট্রেশন বন্ধ",
   "{inst}: login ID {roll}, password {pw}. Please change the password after you sign in.": "{inst}: লগইন আইডি {roll}, পাসওয়ার্ড {pw}। সাইন ইনের পর পাসওয়ার্ড বদলে নিন।",
   "Login ID": "লগইন আইডি", "Copy": "কপি", "Copied": "কপি হয়েছে", "Could not copy": "কপি করা গেল না", "Email sent": "ইমেইল পাঠানো হয়েছে", "Your login details": "আপনার লগইন তথ্য",
+  "Leave empty for a Boys or Girls batch: the batch decides.": "ছেলেদের বা মেয়েদের ব্যাচ হলে ফাঁকা রাখুন: ব্যাচই ঠিক করবে।", "This batch is for {w} only.": "এই ব্যাচ শুধু {w}-দের জন্য।", "Choose the batch.": "ব্যাচ বেছে নিন।",
   "Give this to the person. The password is shown only now.": "এটি ব্যক্তিকে দিন। পাসওয়ার্ড শুধু এখনই দেখা যাবে।", "Done": "সম্পন্ন", "Student added": "ছাত্র যোগ হয়েছে", "Teacher added": "শিক্ষক যোগ হয়েছে",
   "No students found.": "কোনো ছাত্র পাওয়া যায়নি।", "students": "জন ছাত্র", "Show more": "আরও দেখান", "Search by name, roll, phone": "নাম, রোল, ফোন দিয়ে খুঁজুন", "All": "সব", "All groups": "সব গ্রুপ",
   "Guardian name": "অভিভাবকের নাম", "Class (optional)": "ক্লাস (ঐচ্ছিক)", "Enter the name.": "নাম দিন।", "Choose the class.": "ক্লাস বেছে নিন।", "Choose the group (Science / Commerce / Arts).": "বিভাগ বেছে নিন (বিজ্ঞান / ব্যবসায় শিক্ষা / মানবিক)।",

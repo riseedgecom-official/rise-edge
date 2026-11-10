@@ -92,9 +92,8 @@ async function staffHome() {
 // ---------- teacher ----------
 async function teacherHome() {
   const d = T(), A = S.U.filter(active);
-  const [docs, rq, sal, cls, ranks] = await Promise.all([
+  const [docs, sal, cls, ranks] = await Promise.all([
     Promise.all(S.B.map((b) => db.get("att/" + b.id + "_" + d).catch(() => null))),
-    lazy("pages-content.js", "pendingRequests"),
     lazy("pages-fees.js", "salaryCard"),
     lazy("pages-attendance.js", "todayClasses"),
     lazy("pages-exams.js", "ranksBox"),
@@ -111,7 +110,7 @@ async function teacherHome() {
     stat({ ic: "users", label: t("Students"), value: A.length, color: "var(--blue)", sub: t("Your classes") }),
     stat({ ic: "layers", label: t("My batches"), value: S.B.length, color: "var(--ok)" }),
     stat({ ic: "check", label: t("Attendance taken"), value: `${done} / ${S.B.length}`, color: "var(--gold-ink)", sub: t("Today"), ...nav("attendance") }),
-    stat({ ic: "mega", label: t("Pending requests"), value: rq || 0, color: "#6a4cf0", ...nav("requests") }),
+    stat({ ic: "plus", label: t("Add student"), value: "+", sub: t("New registration"), color: "#6a4cf0", act: "tch-addstu" }),
   ])}</div>
   <div class="mt">${card(t("My classes"), S.B.length ? `<div class="list">${S.B.map(rowOf).join("")}</div>` : empty(t("No batch assigned yet."), "layers"))}</div>
   ${cls ? `<div class="mt">${cls}</div>` : ""}${sal ? `<div class="mt">${sal}</div>` : ""}
@@ -119,6 +118,7 @@ async function teacherHome() {
   ${ranks ? `<div class="mt">${ranks}</div>` : ""}`;
 }
 act("hm-att", (el) => { S.bid = el.dataset.arg; location.hash = "#/attendance"; });
+act("tch-addstu", async () => { const m = await import("./pages-people.js"); await m.teacherAddStudent(); });
 
 // ---------- student ----------
 async function studentHome() {
