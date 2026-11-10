@@ -45,7 +45,7 @@ const NAV = [
   { k: "profile", ic: "user", l: "Profile", r: "acts", g: "Account" },
 ];
 // pages that exist but are not in the menu
-const HIDDEN = { share: "act" };
+const HIDDEN = { share: "act", created: "act" };
 const navFor = () => NAV.filter((n) => n.r.includes(roleCode()));
 const pendingOnly = () => !!S.me && S.me.ap === false; // registered, waiting for the admin
 const allowed = (k) => {

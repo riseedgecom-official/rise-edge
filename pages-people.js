@@ -2,7 +2,7 @@
 import { db } from "./lib-db.js";
 import {
   S, esc, t, page, act, onInput, onChange, onSubmit, pageState, refresh, isAdmin, isStaff, instName, cmp, lk, ago, fmtDate, T, money, monthLabel,
-  smsHref, waHref, copyText, addBN, batchOf, uniq,
+  smsHref, waHref, copyText, addBN, batchOf, uniq, go,
 } from "./lib-core.js";
 import {
   icon, avatar, tag, empty, notice, card, row, btn, chips, input, select, field, clsOptions, grpOptions, grpLabel,
@@ -40,6 +40,36 @@ function showLogin(u, roll, pw, why) {
     if (e.target.closest("[data-em]")) { const r = await sendMail(u.email, u.name, t("Your login details"), text); toast(r ? r : t("Email sent"), r ? "bad" : "ok"); }
   });
 }
+
+// The ID and password of a NEW account (student / teacher) are shown on a PAGE, like the registration screen, not in a popup.
+let CREATED = null;
+// opt: { back: page to go back to, again: function that opens the same Add form again, againLabel }
+function showCreated(u, roll, pw, why, opt = {}) {
+  CREATED = { u, roll, pw, why, ...opt };
+  go("created");
+}
+page("created", () => {
+  const c = CREATED;
+  if (!c) return `<div class="card stack tc"><p class="mut">${esc(t("The login details are shown only once, right after the account is made. To give a new password, open the person's profile."))}</p>${btn(t("Done"), "cr-done", { kind: "pri" })}</div>`;
+  const text = t("{inst}: login ID {roll}, password {pw}. Please change the password after you sign in.", { inst: instName(), roll: c.roll, pw: c.pw });
+  const phones = [c.u.phone, c.u.gphone].filter(Boolean).filter((p, i, a) => a.indexOf(p) === i);
+  return `<div class="card stack tc"><div class="medal" style="margin:0 auto">${icon("check")}</div><h2>${esc(c.why)}</h2><p><b>${esc(c.u.name)}</b></p>
+    <div><span class="mut">${esc(t("Login ID"))}</span><div class="b" style="font-size:26px;letter-spacing:.02em;user-select:all">${esc(c.roll)}</div></div>
+    <div><span class="mut">${esc(t("Password"))}</span><div class="b" style="font-size:26px;letter-spacing:.02em;user-select:all">${esc(c.pw)}</div></div>
+    <p class="mut">${esc(t("Give this ID and password to the person. The password is shown only now; they must choose their own password at the first sign in."))}</p>
+    <div class="row" style="justify-content:center">${btn(t("Copy"), "cr-copy", { sm: true, ic: "link" })}
+    ${phones.map((p) => `<a class="btn btn--sm" href="${esc(smsHref(p, text))}">${icon("sms")}SMS ${esc(p)}</a><a class="btn btn--sm" target="_blank" rel="noopener" href="${esc(waHref(p, text))}">${icon("phone")}WhatsApp ${esc(p)}</a>`).join("")}
+    ${c.u.email ? btn(t("Email"), "cr-mail", { sm: true, ic: "mail" }) : ""}</div>
+    <div class="row" style="justify-content:center">${c.again ? btn(c.againLabel, "cr-again", { ic: "plus" }) : ""}${btn(t("Done"), "cr-done", { kind: "pri" })}</div></div>`;
+}, { title: "New account" });
+act("cr-copy", async () => { if (CREATED) toast((await copyText(`${CREATED.roll} / ${CREATED.pw}`)) ? t("Copied") : t("Could not copy"), "ok"); });
+act("cr-mail", async () => {
+  if (!CREATED) return;
+  const c = CREATED, r = await sendMail(c.u.email, c.u.name, t("Your login details"), t("{inst}: login ID {roll}, password {pw}. Please change the password after you sign in.", { inst: instName(), roll: c.roll, pw: c.pw }));
+  toast(r ? r : t("Email sent"), r ? "bad" : "ok");
+});
+act("cr-done", () => { const back = CREATED && CREATED.back; CREATED = null; go(back || "dashboard"); });
+act("cr-again", async () => { const c = CREATED; CREATED = null; if (!c || !c.again) return go("dashboard"); go(c.back || "dashboard"); await c.again(); });
 
 // ---------- students ----------
 const stuState = () => pageState("stu");
@@ -84,7 +114,7 @@ const cleanData = (d, role) => {
 };
 const checkPerson = (d, role, needGd = false) => (!d.name.trim() ? t("Enter the name.") : role !== "teacher" && !d.cls ? t("Choose the class.") : role !== "teacher" && +d.cls >= 9 && !d.grp ? t("Choose the group (Science / Commerce / Arts).") : role !== "teacher" && needGd && !isGd(d.gd) ? t("Choose the gender (Male / Female).") : "");
 
-act("stu-add", async () => {
+const stuAdd = async () => {
   if (!S.B.length) return toast(t("Add a batch first."), "bad");
   let made = null;
   await form(t("Add student"), personFields({ role: "student" }, true), {
@@ -97,8 +127,9 @@ act("stu-add", async () => {
   if (!made) return;
   logAct("Added student " + made.u.name);
   await reload(made.bid);
-  showLogin(made.u, made.r.roll, made.r.pw, t("Student added"));
-});
+  showCreated(made.u, made.r.roll, made.r.pw, t("Student added"), { back: "students", again: stuAdd, againLabel: t("Add student") });
+};
+act("stu-add", stuAdd);
 
 // ---------- teacher: add a student to one of HIS OWN batches ----------
 // Same as the admin's Add student (a new account with a login ID and a temporary password), but the batch is chosen from the
@@ -127,7 +158,7 @@ export async function teacherAddStudent() {
   if (!made) return;
   notify("admin", S.me.name + ": Added student " + made.u.name + " (" + made.r.roll + ") - " + made.b.name, made.b.id);
   await reload(made.b.id);
-  showLogin(made.u, made.r.roll, made.r.pw, t("Student added"));
+  showCreated(made.u, made.r.roll, made.r.pw, t("Student added"), { back: "dashboard", again: teacherAddStudent, againLabel: t("Add student") });
 }
 
 // ---------- profile popup ----------
@@ -235,7 +266,7 @@ page("teachers", () => {
     ${L.length ? `<div class="stack-s">${L.map((x) => tcard(x, `${x.ca ? tag(t("Co-admin"), "gold") : ""}${x.pub ? tag(t("Can publish"), "ok") : ""}${x.active === false ? tag(t("Inactive"), "bad") : ""}`)).join("")}</div>` : `<div class="card">${empty(t("No teachers yet."), "cap")}</div>`}`;
 }, { title: "Teachers" });
 act("tch-f", (el) => { pageState("tch").b = el.dataset.arg; refresh(); });
-act("tch-add", async () => {
+const tchAdd = async () => {
   let made = null;
   await form(t("Add teacher"), personFields({ role: "teacher" }, true), {
     validate: (d) => checkPerson(d, "teacher"),
@@ -244,8 +275,9 @@ act("tch-add", async () => {
   if (!made) return;
   logAct("Added teacher " + made.u.name);
   await reload();
-  showLogin(made.u, made.r.roll, made.r.pw, t("Teacher added"));
-});
+  showCreated(made.u, made.r.roll, made.r.pw, t("Teacher added"), { back: "teachers", again: tchAdd, againLabel: t("Add teacher") });
+};
+act("tch-add", tchAdd);
 act("tch-bids", async (el) => {
   const u = target(el);
   closeModals();
@@ -448,6 +480,7 @@ addBN({
   "{inst}: login ID {roll}, password {pw}. Please change the password after you sign in.": "{inst}: লগইন আইডি {roll}, পাসওয়ার্ড {pw}। সাইন ইনের পর পাসওয়ার্ড বদলে নিন।",
   "Login ID": "লগইন আইডি", "Copy": "কপি", "Copied": "কপি হয়েছে", "Could not copy": "কপি করা গেল না", "Email sent": "ইমেইল পাঠানো হয়েছে", "Your login details": "আপনার লগইন তথ্য",
   "Leave empty for a Boys or Girls batch: the batch decides.": "ছেলেদের বা মেয়েদের ব্যাচ হলে ফাঁকা রাখুন: ব্যাচই ঠিক করবে।", "This batch is for {w} only.": "এই ব্যাচ শুধু {w}-দের জন্য।", "Choose the batch.": "ব্যাচ বেছে নিন।",
+  "New account": "নতুন অ্যাকাউন্ট", "Give this ID and password to the person. The password is shown only now; they must choose their own password at the first sign in.": "এই আইডি ও পাসওয়ার্ড ব্যক্তিকে দিন। পাসওয়ার্ড শুধু এখনই দেখা যাবে; প্রথমবার সাইন ইন করার সময় তিনি নিজের পাসওয়ার্ড বেছে নেবেন।", "The login details are shown only once, right after the account is made. To give a new password, open the person's profile.": "লগইন তথ্য অ্যাকাউন্ট খোলার পরপরই শুধু একবার দেখানো হয়। নতুন পাসওয়ার্ড দিতে ব্যক্তির প্রোফাইল খুলুন।",
   "Give this to the person. The password is shown only now.": "এটি ব্যক্তিকে দিন। পাসওয়ার্ড শুধু এখনই দেখা যাবে।", "Done": "সম্পন্ন", "Student added": "ছাত্র যোগ হয়েছে", "Teacher added": "শিক্ষক যোগ হয়েছে",
   "No students found.": "কোনো ছাত্র পাওয়া যায়নি।", "students": "জন ছাত্র", "Show more": "আরও দেখান", "Search by name, roll, phone": "নাম, রোল, ফোন দিয়ে খুঁজুন", "All": "সব", "All groups": "সব গ্রুপ",
   "Guardian name": "অভিভাবকের নাম", "Class (optional)": "ক্লাস (ঐচ্ছিক)", "Enter the name.": "নাম দিন।", "Choose the class.": "ক্লাস বেছে নিন।", "Choose the group (Science / Commerce / Arts).": "বিভাগ বেছে নিন (বিজ্ঞান / ব্যবসায় শিক্ষা / মানবিক)।",
