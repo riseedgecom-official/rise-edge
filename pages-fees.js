@@ -3,10 +3,11 @@
 import { db } from "./lib-db.js";
 import {
   S, esc, t, page, act, onInput, onChange, onSubmit, formData, pageState, refresh, go, canFees, isStudent, isTeacher, instName, T, fmtDate, ago, money, addBN,
-  activeStudents, curBatch, n2, num, monthLabel, batchOf,
+  activeStudents, curBatch, n2, num, monthLabel, batchOf, waHref,
 } from "./lib-core.js";
 import { icon, avatar, tag, empty, notice, card, row, btn, chips, input, select, batchPicker, ask, askText, form, toast, showDoc, stat, modal, closeModals, donut } from "./lib-ui.js";
 import { notify, saveInst, defaultFee, shrinkImage } from "./lib-svc.js";
+import { receiptPdf, shareFile } from "./lib-pdf.js";
 import { feeFor, paidIn, feeStart, feePlan, monthStatus, nextMonth, manualState, manualDue } from "./lib-stats.js";
 
 const F = () => pageState("fe");
@@ -78,6 +79,7 @@ act("fe-ok", async (el) => {
   await db.upd("pr/" + id, { st: "ok", amt: a, by: S.me.name, at: Date.now() });
   notify(q.sid, t("Payment approved: ৳{a} ({m})", { a, m: q.m }));
   refresh();
+  await offerReceipt(S.U.find((x) => x.id === q.sid), q.m, a);
 });
 act("fe-no", async (el) => {
   const id = el.dataset.arg, q = await db.get("pr/" + id);
@@ -95,12 +97,48 @@ async function receipt(u, m) {
   if (!P.length) return toast(t("No payment found for this month"), "bad");
   const b = batchOf(u.bid) || {}, bf = bfMap(await db.list("bf", ["bid", "==", u.bid]).catch(() => []));
   const tot = n2(P.reduce((a, p) => a + p.amt, 0)), fee = feeFor(u, b, m, ctx(bf)), due = Math.max(0, n2(fee - tot));
+  receiptFile(u, m, { P, b, fee, tot, due });   // the PDF is made while the page is read; the share button waits for it if needed
   const BX = "border:1px solid #9fb6d1;border-radius:6px;padding:10px 12px;margin:0 0 10px", TD = "padding:6px 4px;border-top:1px solid #d5dfec", RW = "display:flex;justify-content:space-between";
   showDoc(`<div class="paper" style="max-width:460px;font-family:Georgia,'Anek Bangla',serif;border:2px solid #13294b;border-radius:12px"><div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><img src="logo.jpg" alt="" style="width:58px;height:58px;border-radius:50%"><div style="flex:1;text-align:center"><div style="font-size:19px;font-weight:800;text-transform:uppercase">${esc(instName())}</div><div style="letter-spacing:.2em;font-size:12px">${esc(t("FEE RECEIPT"))}</div></div></div>
   <div style="${BX};display:grid;grid-template-columns:1fr 1fr;gap:4px 14px"><div><b>${esc(t("Receipt no"))}:</b> ${esc("RE-" + m.replace("-", "") + "-" + (u.roll || ""))}</div><div><b>${esc(t("Date"))}:</b> ${T()}</div><div><b>${esc(t("Student"))}:</b> ${esc(u.name)}</div><div><b>${esc(t("Roll"))}:</b> ${esc(u.roll)}</div><div><b>${esc(t("Batch"))}:</b> ${esc(b.name || "")}</div><div><b>${esc(t("Month"))}:</b> ${esc(monthLabel(m))}</div></div>
   <table style="width:100%;border-collapse:collapse;margin:0 0 10px"><tr><th align="left">${esc(t("Date"))}</th><th align="left">${esc(t("Method"))}</th><th align="left">Trx ID</th><th align="right">${esc(t("Amount"))}</th></tr>${P.map((p) => `<tr><td style="${TD}">${esc(p.d || "–")}</td><td style="${TD}">${esc(p.method || "")}</td><td style="${TD}">${esc(p.tx || "")}</td><td style="${TD}" align="right">৳${p.amt}</td></tr>`).join("")}</table>
   <div style="${BX}"><div style="${RW}"><span>${esc(t("Monthly fee"))}</span><b>৳${fee}</b></div><div style="${RW}"><span>${esc(t("Total paid"))}</span><b>৳${tot}</b></div><div style="${RW}"><span>${esc(t("Due"))}</span><b>৳${due}</b></div><div style="text-align:center;margin-top:8px;font-weight:800;letter-spacing:.12em;color:${due ? "#b3261e" : "#1d7a46"}">${esc(due ? t("PARTLY PAID") : t("PAID"))}</div></div>
-  <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:26px;font-size:12px"><span>${esc(S.INST.phone || "")}</span><span style="border-top:1px solid #13294b;padding-top:4px">${esc(S.INST.owner || t("Authorized signature"))}</span></div></div>`);
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:26px;font-size:12px"><span>${esc(S.INST.phone || "")}</span><span style="border-top:1px solid #13294b;padding-top:4px">${esc(S.INST.owner || t("Authorized signature"))}</span></div></div>`, { extra: btn(t("Share on WhatsApp"), "rc-share", { ic: "phone" }) });
+}
+// The same receipt as a PDF FILE (one page) for the share sheet / WhatsApp. It is made before the button is tapped, so the tap can share at once.
+let RC = null, RCP = null;
+function receiptFile(u, m, { P, b, fee, tot, due }) {
+  RC = null;
+  const d = {
+    inst: instName(), title: t("FEE RECEIPT"), phone: S.INST.phone || "", sign: S.INST.owner || t("Authorized signature"),
+    head: [[t("Receipt no"), "RE-" + m.replace("-", "") + "-" + (u.roll || "")], [t("Date"), T()], [t("Month"), monthLabel(m)], [t("Student"), u.name], [t("Roll"), u.roll || ""], [t("Batch"), b.name || ""]],
+    cols: [t("Date"), t("Method"), "Trx ID", t("Amount")], pay: P.map((p) => [p.d || "–", p.method || "", p.tx || "", "৳" + p.amt]),
+    sum: [[t("Monthly fee"), "৳" + fee], [t("Total paid"), "৳" + tot], [t("Due"), "৳" + due]], status: due ? t("PARTLY PAID") : t("PAID"), bad: due > 0,
+  };
+  const text = t("{inst}: fee receipt of {n} ({m}). Paid ৳{p}, due ৳{d}.", { inst: instName(), n: u.name, m: monthLabel(m), p: tot, d: due });
+  const me = (RCP = receiptPdf(d, "Receipt-" + String(u.roll || u.id).replace(/[^A-Za-z0-9-]/g, "") + "-" + m + ".pdf").then((file) => { const r = { file, text, phone: u.gphone || u.phone || "" }; if (RCP === me) RC = r; return r; }));
+  me.catch(() => {});
+  return me;
+}
+// share sheet with the PDF (WhatsApp is in it). A device that cannot share files saves the PDF and opens the guardian's WhatsApp chat.
+act("rc-share", async () => {
+  const rc = RC || (RCP ? await RCP.catch(() => null) : null);
+  if (!rc) return toast(t("The receipt could not be made."), "bad");
+  const r = await shareFile(rc.file, { text: rc.text, title: rc.file.name });
+  if (r === "saved") { toast(t("PDF saved. Attach it in WhatsApp."), "ok"); if (rc.phone) window.open(waHref(rc.phone, rc.text), "_blank", "noopener"); }
+});
+act("rc-x", () => closeModals());
+act("rc-view", async (el) => { closeModals(); const u = S.U.find((x) => x.id === el.dataset.arg); if (u) await receipt(u, el.dataset.m); });
+// after the admin approves a payment: offer the receipt for WhatsApp
+async function offerReceipt(u, m, amt) {
+  if (!u) return;
+  const P = await db.list("pay", ["sid", "==", u.id], ["m", "==", m]).catch(() => []);
+  if (!P.length) return;
+  const b = batchOf(u.bid) || {}, bf = bfMap(await db.list("bf", ["bid", "==", u.bid]).catch(() => []));
+  const tot = n2(P.reduce((a, p) => a + p.amt, 0)), fee = feeFor(u, b, m, ctx(bf)), due = Math.max(0, n2(fee - tot));
+  receiptFile(u, m, { P, b, fee, tot, due });
+  modal(`<h3>${esc(t("Payment approved"))}</h3><p><b>${esc(u.name)}</b> · ৳${esc(amt)} (${esc(monthLabel(m))})</p><p class="mut">${esc(t("Share the receipt PDF on WhatsApp."))}</p>
+    <div class="mod-f">${btn(t("Close"), "rc-x")}${btn(t("View receipt"), "rc-view", { arg: u.id, extra: `data-m="${esc(m)}"` })}${btn(t("Share on WhatsApp"), "rc-share", { kind: "pri", ic: "phone" })}</div>`);
 }
 act("fe-rcpt", async (el) => { const u = S.U.find((x) => x.id === el.dataset.arg); if (u) await receipt(u, F().m); });
 
@@ -515,7 +553,7 @@ addBN({
   "Amount (৳)": "পরিমাণ (৳)", "Method": "মাধ্যম", "Bank": "ব্যাংক", "Other": "অন্যান্য", "Transaction ID (optional)": "ট্রানজেকশন আইডি (ঐচ্ছিক)", "Add payment": "পেমেন্ট যোগ করুন", "Receipt": "রসিদ", "No fee": "ফি নেই", "No students.": "কোনো ছাত্র নেই।",
   "Enter the amount": "পরিমাণ দিন", "This Transaction ID is already used": "এই ট্রানজেকশন আইডি আগেই ব্যবহার হয়েছে", "Payment received: ৳{a} ({m})": "পেমেন্ট গৃহীত: ৳{a} ({m})", "Saved": "সংরক্ষিত", "Screenshot not found": "স্ক্রিনশট পাওয়া যায়নি",
   "Already handled": "আগেই সম্পন্ন হয়েছে", "Payment approved: ৳{a} ({m})": "পেমেন্ট অনুমোদিত: ৳{a} ({m})", "Reason (optional)": "কারণ (ঐচ্ছিক)", "Payment not approved: {m}": "পেমেন্ট অনুমোদিত হয়নি: {m}", "No payment found for this month": "এই মাসে কোনো পেমেন্ট পাওয়া যায়নি",
-  "FEE RECEIPT": "ফি রসিদ", "Receipt no": "রসিদ নং", "Date": "তারিখ", "Roll": "রোল", "Batch": "ব্যাচ", "Amount": "টাকার পরিমাণ", "Monthly fee": "মাসিক ফি", "Total paid": "মোট পরিশোধ", "PARTLY PAID": "আংশিক পরিশোধ", "PAID": "পরিশোধিত", "Authorized signature": "অনুমোদিত স্বাক্ষর",
+  "FEE RECEIPT": "ফি রসিদ", "Share on WhatsApp": "হোয়াটসঅ্যাপে পাঠান", "Payment approved": "পেমেন্ট অনুমোদিত", "Share the receipt PDF on WhatsApp.": "রসিদের PDF হোয়াটসঅ্যাপে পাঠান।", "View receipt": "রসিদ দেখুন", "PDF saved. Attach it in WhatsApp.": "PDF সেভ হয়েছে। হোয়াটসঅ্যাপে সংযুক্ত করে পাঠান।", "The receipt could not be made.": "রসিদ তৈরি করা যায়নি।", "{inst}: fee receipt of {n} ({m}). Paid ৳{p}, due ৳{d}.": "{inst}: {n}-এর ফি রসিদ ({m})। জমা ৳{p}, বাকি ৳{d}।", "Receipt no": "রসিদ নং", "Date": "তারিখ", "Roll": "রোল", "Batch": "ব্যাচ", "Amount": "টাকার পরিমাণ", "Monthly fee": "মাসিক ফি", "Total paid": "মোট পরিশোধ", "PARTLY PAID": "আংশিক পরিশোধ", "PAID": "পরিশোধিত", "Authorized signature": "অনুমোদিত স্বাক্ষর",
   "Fee settings": "ফি সেটিংস", "Default monthly fee (all students)": "সাধারণ মাসিক ফি (সব ছাত্র)", "Save": "সংরক্ষণ", "Order used: personal fee, then the published fee of that month, then the batch fee, then the default fee.": "প্রযোজ্য ক্রম: ব্যক্তিগত ফি, তারপর ওই মাসের প্রকাশিত ফি, তারপর ব্যাচ ফি, তারপর সাধারণ ফি।",
   "Tap a batch, then choose the month and the amount. Publishing shows the fee on the dashboard of every student in that batch.": "একটি ব্যাচ চাপুন, মাস ও পরিমাণ বেছে নিন। প্রকাশ করলে ওই ব্যাচের সব ছাত্রের ড্যাশবোর্ডে ফি দেখা যাবে।",
   "Batch fee {a}": "ব্যাচ ফি {a}", "Publish": "প্রকাশ করুন", "Set as batch fee": "ব্যাচ ফি হিসেবে সেট", "Remove": "সরান", "Choose the month": "মাস বেছে নিন", "Fee published: {m} ৳{a}": "ফি প্রকাশিত: {m} ৳{a}", "Published": "প্রকাশিত", "Remove this fee? The default fee will apply again.": "এই ফি সরাবেন? সাধারণ ফি আবার প্রযোজ্য হবে।",
