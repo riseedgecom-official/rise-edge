@@ -47,8 +47,11 @@ let CREATED = null;
 function showCreated(u, roll, pw, why, opt = {}) {
   CREATED = { u, roll, pw, why, ...opt };
   go("created");
+  // If this page is not allowed by the app (an older app.js is still online), the same page is shown full screen instead of being lost.
+  setTimeout(() => { if (CREATED && S.page !== "created" && !document.querySelector(".cr-ov")) { const el = document.createElement("div"); el.className = "doc cr-ov"; el.innerHTML = `<div class="doc-pg">${createdHtml()}</div>`; document.body.appendChild(el); } }, 600);
 }
-page("created", () => {
+const closeOv = () => document.querySelectorAll(".cr-ov").forEach((e) => e.remove());
+function createdHtml() {
   const c = CREATED;
   if (!c) return `<div class="card stack tc"><p class="mut">${esc(t("The login details are shown only once, right after the account is made. To give a new password, open the person's profile."))}</p>${btn(t("Done"), "cr-done", { kind: "pri" })}</div>`;
   const text = t("{inst}: login ID {roll}, password {pw}. Please change the password after you sign in.", { inst: instName(), roll: c.roll, pw: c.pw });
@@ -61,15 +64,16 @@ page("created", () => {
     ${phones.map((p) => `<a class="btn btn--sm" href="${esc(smsHref(p, text))}">${icon("sms")}SMS ${esc(p)}</a><a class="btn btn--sm" target="_blank" rel="noopener" href="${esc(waHref(p, text))}">${icon("phone")}WhatsApp ${esc(p)}</a>`).join("")}
     ${c.u.email ? btn(t("Email"), "cr-mail", { sm: true, ic: "mail" }) : ""}</div>
     <div class="row" style="justify-content:center">${c.again ? btn(c.againLabel, "cr-again", { ic: "plus" }) : ""}${btn(t("Done"), "cr-done", { kind: "pri" })}</div></div>`;
-}, { title: "New account" });
+}
+page("created", () => createdHtml(), { title: "New account" });
 act("cr-copy", async () => { if (CREATED) toast((await copyText(`${CREATED.roll} / ${CREATED.pw}`)) ? t("Copied") : t("Could not copy"), "ok"); });
 act("cr-mail", async () => {
   if (!CREATED) return;
   const c = CREATED, r = await sendMail(c.u.email, c.u.name, t("Your login details"), t("{inst}: login ID {roll}, password {pw}. Please change the password after you sign in.", { inst: instName(), roll: c.roll, pw: c.pw }));
   toast(r ? r : t("Email sent"), r ? "bad" : "ok");
 });
-act("cr-done", () => { const back = CREATED && CREATED.back; CREATED = null; go(back || "dashboard"); });
-act("cr-again", async () => { const c = CREATED; CREATED = null; if (!c || !c.again) return go("dashboard"); go(c.back || "dashboard"); await c.again(); });
+act("cr-done", () => { const back = CREATED && CREATED.back; CREATED = null; closeOv(); go(back || "dashboard"); });
+act("cr-again", async () => { const c = CREATED; CREATED = null; closeOv(); if (!c || !c.again) return go("dashboard"); go(c.back || "dashboard"); await c.again(); });
 
 // ---------- students ----------
 const stuState = () => pageState("stu");
@@ -126,8 +130,8 @@ const stuAdd = async () => {
   });
   if (!made) return;
   logAct("Added student " + made.u.name);
-  await reload(made.bid);
-  showCreated(made.u, made.r.roll, made.r.pw, t("Student added"), { back: "students", again: stuAdd, againLabel: t("Add student") });
+  showCreated(made.u, made.r.roll, made.r.pw, t("Student added"), { back: "students", again: stuAdd, againLabel: t("Add student") });   // first: the new ID and password must never get lost
+  await reload(made.bid).catch(() => {});
 };
 act("stu-add", stuAdd);
 
@@ -157,8 +161,8 @@ export async function teacherAddStudent() {
   });
   if (!made) return;
   notify("admin", S.me.name + ": Added student " + made.u.name + " (" + made.r.roll + ") - " + made.b.name, made.b.id);
-  await reload(made.b.id);
-  showCreated(made.u, made.r.roll, made.r.pw, t("Student added"), { back: "dashboard", again: teacherAddStudent, againLabel: t("Add student") });
+  showCreated(made.u, made.r.roll, made.r.pw, t("Student added"), { back: "dashboard", again: teacherAddStudent, againLabel: t("Add student") });   // first: the new ID and password must never get lost
+  await reload(made.b.id).catch(() => {});
 }
 
 // ---------- profile popup ----------
@@ -274,8 +278,8 @@ const tchAdd = async () => {
   });
   if (!made) return;
   logAct("Added teacher " + made.u.name);
-  await reload();
   showCreated(made.u, made.r.roll, made.r.pw, t("Teacher added"), { back: "teachers", again: tchAdd, againLabel: t("Add teacher") });
+  await reload().catch(() => {});
 };
 act("tch-add", tchAdd);
 act("tch-bids", async (el) => {

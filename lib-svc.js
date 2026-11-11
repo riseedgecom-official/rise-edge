@@ -1,6 +1,6 @@
 // Data services: loading the app's data, accounts, notifications, files, mail.
 // Pages call these instead of touching the database directly for anything shared.
-import { db, withNewAccount, isEmailInUse, authEmail } from "./lib-db.js";
+import { db, withNewAccount, isEmailInUse, authEmail, dbError } from "./lib-db.js";
 import { S, T, t, lk, cmp, num, sleep } from "./lib-core.js";
 import { calcBatch, statRow, rollOf, ADMIN_ID, defaultBatches, findBatch, hasBatch, classGroups, batchSpec, isGd, DEFAULT_FEE } from "./lib-stats.js";
 
@@ -142,6 +142,8 @@ export async function getStats(bid) {
 // ---------- accounts ----------
 const tempPassword = () => Math.random().toString(36).slice(2, 8) + "A1";
 const suffix4 = () => (Math.random().toString(36) + "0000").replace(/[^a-z0-9]/g, "").slice(0, 4);
+// the red text of a failed step: what was being done + the reason (and the Firebase code, so that it can be looked up)
+const stepError = (what, e) => { const x = new Error(what + " failed: " + dbError(e) + (e && e.code ? " [" + e.code + "]" : "")); x.code = e && e.code; return x; };
 const isDenied = (e) => e && (e.code === "permission-denied" || /permission/i.test(String(e.message || "")));
 
 // ROLL NUMBERS. A roll number is the smallest free number of its kind and year: when an account is deleted its number is free again and
@@ -177,11 +179,11 @@ export async function createAccount(role, data) {
     const n = nextFree(role, year, taken), roll = rollOf(role, year, n), key = roll.toLowerCase();
     taken.add(key);
     if (await db.get("login/" + key)) continue;
-    const got = await openLogin(roll, pw, async (uid, tdb, email) => ({ uid, email }));
+    const got = await openLogin(roll, pw, async (uid, tdb, email) => ({ uid, email })).catch((e) => { throw stepError("Making the login (" + roll + ")", e); });
     await db.batch([
       { set: ["users/" + got.uid, { ...data, role, roll, active: true, ap: true, mustChange: true, createdAt: Date.now() }] },
       { set: ["login/" + key, { es: [got.email] }] },
-    ]);
+    ]).catch((e) => { throw stepError("Saving the profile and the login lookup of " + roll, e); });
     return { roll, pw, id: got.uid };
   }
   throw new Error("Could not create a roll number. Please try again.");
