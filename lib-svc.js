@@ -143,7 +143,14 @@ export async function getStats(bid) {
 const tempPassword = () => Math.random().toString(36).slice(2, 8) + "A1";
 const suffix4 = () => (Math.random().toString(36) + "0000").replace(/[^a-z0-9]/g, "").slice(0, 4);
 // the red text of a failed step: what was being done + the reason (and the Firebase code, so that it can be looked up)
-const stepError = (what, e) => { const x = new Error(what + " failed: " + dbError(e) + (e && e.code ? " [" + e.code + "]" : "")); x.code = e && e.code; return x; };
+const stepError = (what, e) => { if (e && e.code === "timeout") return e; const x = new Error(what + " failed: " + dbError(e) + (e && e.code ? " [" + e.code + "]" : "")); x.code = e && e.code; return x; };
+// A write that cannot reach the server does not fail, it waits (Firestore keeps it and sends it when the internet is back), so the
+// Save button would stay on "Saving..." for ever. Each step of adding a person is therefore given a time; after that the red text says so.
+export const LIMITS = { step: 30000 };
+const inTime = (p, what) => {
+  let tm;
+  return Promise.race([p, new Promise((_, rej) => { tm = setTimeout(() => { const x = new Error(what + " is taking too long: the internet is slow or off. Look at the list before adding again, it may still be saved when the internet is back."); x.code = "timeout"; rej(x); }, LIMITS.step); })]).finally(() => clearTimeout(tm));
+};
 const isDenied = (e) => e && (e.code === "permission-denied" || /permission/i.test(String(e.message || "")));
 
 // ROLL NUMBERS. A roll number is the smallest free number of its kind and year: when an account is deleted its number is free again and
@@ -174,16 +181,16 @@ async function openLogin(roll, pw, fn, plainOnly) {
 }
 // Admin / co-admin adds a student or teacher. Returns {roll, pw, id}.
 export async function createAccount(role, data) {
-  const year = new Date().getFullYear(), pw = tempPassword(), taken = await takenRolls();
+  const year = new Date().getFullYear(), pw = tempPassword(), taken = await inTime(takenRolls(), "Reading the roll numbers").catch((e) => { throw stepError("Finding a free roll number", e); });
   for (let i = 0; i < 30; i++) {
     const n = nextFree(role, year, taken), roll = rollOf(role, year, n), key = roll.toLowerCase();
     taken.add(key);
-    if (await db.get("login/" + key)) continue;
-    const got = await openLogin(roll, pw, async (uid, tdb, email) => ({ uid, email })).catch((e) => { throw stepError("Making the login (" + roll + ")", e); });
-    await db.batch([
+    if (await inTime(db.get("login/" + key), "Checking the roll number " + roll).catch((e) => { throw stepError("Checking the roll number " + roll, e); })) continue;
+    const got = await inTime(openLogin(roll, pw, async (uid, tdb, email) => ({ uid, email })), "Making the login").catch((e) => { throw stepError("Making the login (" + roll + ")", e); });
+    await inTime(db.batch([
       { set: ["users/" + got.uid, { ...data, role, roll, active: true, ap: true, mustChange: true, createdAt: Date.now() }] },
       { set: ["login/" + key, { es: [got.email] }] },
-    ]).catch((e) => { throw stepError("Saving the profile and the login lookup of " + roll, e); });
+    ]), "Saving " + roll).catch((e) => { throw stepError("Saving the profile and the login lookup of " + roll, e); });
     return { roll, pw, id: got.uid };
   }
   throw new Error("Could not create a roll number. Please try again.");

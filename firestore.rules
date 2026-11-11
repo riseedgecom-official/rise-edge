@@ -161,10 +161,12 @@ service cloud.firestore {
     }
     match /users/{id}/reports/{r} {
       allow read: if request.auth != null && sid() == id && apd();
+      allow read: if cadm();   // the admin can find them again (deleting a person removes them too)
       allow write: if cadm() || tpub() && tch(get(/databases/$(d)/documents/users/$(id)).data.bid);
     }
     match /users/{id}/hist/{h} {
       allow read: if request.auth != null && sid() == id && apd();
+      allow read, delete: if cadm();   // the admin can find and remove them when a person is deleted
       allow create: if cadm() || tch(get(/databases/$(d)/documents/users/$(id)).data.bid);
     }
 
