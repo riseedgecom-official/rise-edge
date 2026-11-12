@@ -46,6 +46,7 @@ service cloud.firestore {
       allow create: if request.auth != null && regOpen() && id.matches('[ST][0-9]{4}') && request.resource.data.keys().hasOnly(['n']) && request.resource.data.n is int && request.resource.data.n >= 1 && request.resource.data.n <= 100000;
       allow update: if request.auth != null && regOpen() && request.resource.data.keys().hasOnly(['n']) && request.resource.data.n is int && request.resource.data.n > resource.data.n && request.resource.data.n <= resource.data.n + 1000;
     }
+    match /ver/{v} { allow read: if v == 'v20261112'; }   // version stamp: the app reads ver/<this text>; allowed = these rules are the published ones (RULES_VER in lib-svc.js)
     match /login/{id} {   // roll -> login email(s)
       allow read: if true;
       // the login address is roll@rise.local, or roll.xxxx@rise.local when that roll number belongs to an account that was deleted and is used again

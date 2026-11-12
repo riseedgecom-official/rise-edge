@@ -144,6 +144,21 @@ const tchAddFields = () => `${select("bid", S.B.map((b) => [b.id, b.name]), S.B[
   ${input("school", { label: t("School / college") })}${input("phone", { label: t("Phone"), type: "tel", placeholder: "01XXXXXXXXX" })}
   ${input("gname", { label: t("Guardian name") })}${input("gphone", { label: t("Guardian's phone"), type: "tel", placeholder: "01XXXXXXXXX" })}${input("gem", { label: t("Guardian's email"), type: "email" })}
   ${input("addr", { label: t("Address") })}${input("email", { label: t("Email"), type: "email" })}`;
+// When the rules refuse a teacher's new student: what the rule `tchAdd` needs, checked here, so the red text tells where the difference is
+// (a text where the rules expect a list value, a batch that is not his, ...). Only a hint for the one who fixes it.
+function tchAddWhy(x, b) {
+  const me = S.me || {}, bad = [], inl = (v, l) => l.includes(v === undefined ? "" : v);
+  const CL = ["", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
+  if (me.role !== "teacher") bad.push("your account is not a teacher");
+  if (me.ap === false) bad.push("your account is not approved");
+  if (me.active === false) bad.push("your account is switched off");
+  if (!(Array.isArray(me.bids) && me.bids.includes(b.id))) bad.push("this batch is not in your account's batch list");
+  if (!inl(x.gd, ["", "M", "F"])) bad.push("gender value " + JSON.stringify(x.gd));
+  if (!inl(x.cls, CL)) bad.push("class value " + JSON.stringify(x.cls));
+  if (!inl(x.grp, ["", "Science", "Commerce", "Arts"])) bad.push("group value " + JSON.stringify(x.grp));
+  ["nick", "phone", "addr", "email", "school", "gphone", "gem", "gname"].forEach((k) => { if (x[k] !== undefined && (typeof x[k] !== "string" || x[k].length >= 300)) bad.push(k + " is not a short text"); });
+  return bad.length ? "Local check: " + bad.join("; ") + "." : "Local check: your account, the batch and the data all fit the rules.";
+}
 export async function teacherAddStudent() {
   if (!S.B.length) return toast(t("No batch assigned yet."), "bad");
   let made = null;
@@ -156,7 +171,8 @@ export async function teacherAddStudent() {
       const b = S.B.find((x) => x.id === d.bid);
       if (!b) throw new Error(t("Choose the batch."));   // only his own batches
       const x = cleanData({ ...d, cls: b.cls || "", grp: b.grp || "", gd: isGd(d.gd) ? d.gd : b.gd || "" }, "student");
-      made = { u: { ...x, role: "student" }, r: await createAccount("student", { ...x, bid: b.id }), b };
+      try { made = { u: { ...x, role: "student" }, r: await createAccount("student", { ...x, bid: b.id }), b }; }
+      catch (e) { if (e && e.code === "permission-denied") e.message += " " + tchAddWhy(x, b); throw e; }
     },
   });
   if (!made) return;

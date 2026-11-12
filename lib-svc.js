@@ -143,7 +143,7 @@ export async function getStats(bid) {
 const tempPassword = () => Math.random().toString(36).slice(2, 8) + "A1";
 const suffix4 = () => (Math.random().toString(36) + "0000").replace(/[^a-z0-9]/g, "").slice(0, 4);
 // the red text of a failed step: what was being done + the reason (and the Firebase code, so that it can be looked up)
-const stepError = (what, e) => { if (e && e.code === "timeout") return e; const x = new Error(what + " failed: " + dbError(e) + (e && e.code ? " [" + e.code + "]" : "")); x.code = e && e.code; return x; };
+const stepError = (what, e, extra = "") => { if (e && e.code === "timeout") return e; const x = new Error(what + " failed: " + dbError(e) + (e && e.code ? " [" + e.code + "]" : "") + (extra ? " " + extra : "")); x.code = e && e.code; return x; };
 // A write that cannot reach the server does not fail, it waits (Firestore keeps it and sends it when the internet is back), so the
 // Save button would stay on "Saving..." for ever. Each step of adding a person is therefore given a time; after that the red text says so.
 export const LIMITS = { step: 30000 };
@@ -152,6 +152,17 @@ const inTime = (p, what) => {
   return Promise.race([p, new Promise((_, rej) => { tm = setTimeout(() => { const x = new Error(what + " is taking too long: the internet is slow or off. Look at the list before adding again, it may still be saved when the internet is back."); x.code = "timeout"; rej(x); }, LIMITS.step); })]).finally(() => clearTimeout(tm));
 };
 const isDenied = (e) => e && (e.code === "permission-denied" || /permission/i.test(String(e.message || "")));
+// Are the rules in Firebase the ones of this app? firestore.rules lets anybody read ver/<RULES_VER> and nothing else of that name, so the
+// read is refused only when the published rules are older (or not published at all). true / false / null (cannot tell: no internet)
+export const RULES_VER = "v20261112";
+export async function rulesCurrent() {
+  try { await db.get("ver/" + RULES_VER); return true; } catch (e) { return isDenied(e) ? false : null; }
+}
+export async function rulesHint() {
+  const ok = await rulesCurrent();
+  return ok === false ? "CHECKED: the rules in Firebase are OLD (version stamp missing). Open Firebase Console > Firestore Database > Rules, paste the WHOLE firestore.rules file of the repo, press Publish, wait a minute, try again."
+    : ok === true ? "CHECKED: the rules in Firebase are the latest ones." : "";
+}
 
 // ROLL NUMBERS. A roll number is the smallest free number of its kind and year: when an account is deleted its number is free again and
 // the next registration gets it. The admin's ID (ADMIN_ID) is never given to anybody else.
@@ -190,7 +201,7 @@ export async function createAccount(role, data) {
     await inTime(db.batch([
       { set: ["users/" + got.uid, { ...data, role, roll, active: true, ap: true, mustChange: true, createdAt: Date.now() }] },
       { set: ["login/" + key, { es: [got.email] }] },
-    ]), "Saving " + roll).catch((e) => { throw stepError("Saving the profile and the login lookup of " + roll, e); });
+    ]), "Saving " + roll).catch(async (e) => { throw stepError("Saving the profile and the login lookup of " + roll, e, isDenied(e) ? await rulesHint() : ""); });
     return { roll, pw, id: got.uid };
   }
   throw new Error("Could not create a roll number. Please try again.");
