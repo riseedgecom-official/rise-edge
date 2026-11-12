@@ -4,8 +4,8 @@ import { changePassword, dbError } from "./lib-db.js";
 import {
   S, esc, t, page, act, onChange, onSubmit, formData, pageState, refresh, isStaff, isAdmin, isTeacher, isStudent, instName, addBN, batchOf, activeStudents, isEmail, cmp,
 } from "./lib-core.js";
-import { icon, avatar, tag, empty, notice, card, row, btn, chips, input, textarea, select, batchPicker, form, toast, showDoc } from "./lib-ui.js";
-import { reloadMe, saveInst, squarePhoto, mailCfg, sendMail } from "./lib-svc.js";
+import { icon, avatar, tag, empty, notice, card, row, btn, chips, input, textarea, select, batchPicker, form, toast, showDoc, ask } from "./lib-ui.js";
+import { reloadMe, saveInst, squarePhoto, mailCfg, sendMail, adminIdPlan, claimAdminId } from "./lib-svc.js";
 import { qrSvg, qrMatrix } from "./lib-qr.js";
 import { fitLink } from "./lib-idq.js";
 import { ADMIN_ID } from "./lib-stats.js";
@@ -126,6 +126,22 @@ page("idcard", async () => {
 }, { title: "ID card" });
 act("id-tab", (el) => { IC().k = el.dataset.arg; refresh(); });
 
+// the admin takes REAT-2026-001 (see adminIdPlan in lib-svc.js)
+act("pf-adminid", async () => {
+  const u = S.me;
+  if (!u || u.role !== "admin" || u.co) return;
+  let plan;
+  try { plan = await adminIdPlan(await db.get("users/" + S.pid)); } catch (e) { return toast(t(dbError(e)), "bad"); }
+  if (!plan) { toast(t("Your ID is already {b}", { b: ADMIN_ID }), "ok"); return refresh(); }
+  const msg = plan.swap
+    ? t("{n} has {b} now. You and {n} swap IDs: you get {b}, {n} gets {a}. Both of you sign in with the new ID from now on.", { n: plan.swap.name || plan.swap.id, a: u.roll, b: ADMIN_ID })
+    : t("Your login ID changes from {a} to {b}. Sign in with {b} from now on.", { a: u.roll, b: ADMIN_ID });
+  if (!(await ask(msg, { title: t("Change my ID"), ok: t("Change ID") }))) return;
+  try { await claimAdminId(); } catch (e) { return toast(t(dbError(e)), "bad"); }
+  toast(t("Your ID is now {b}", { b: ADMIN_ID }), "ok");
+  refresh();
+});
+
 // ================= profile =================
 page("profile", async () => {
   const u = S.me, st = u.role === "student", b = batchOf(u.bid) || {};
@@ -134,7 +150,8 @@ page("profile", async () => {
   if (!st && u.subject) info.push([t("Subject"), u.subject]);
   if (u.email) info.push([t("Email"), u.email]);
   const pend = u.ap === false;
-  return `${pend ? notice(`<b>${esc(t("Waiting for admin approval"))}</b><br>${esc(t("Your account is created. The admin or a co-admin must approve it before you can open the other pages."))}`, "warn", "clock") : ""}
+  const fixId = u.role === "admin" && !u.co && u.roll && u.roll !== ADMIN_ID;   // an admin who was a teacher before keeps the old teacher ID
+  return `${fixId ? `<div style="margin-bottom:12px">` + notice(`<b>${esc(t("Your login ID is {a}, but the admin's ID is {b}.", { a: u.roll, b: ADMIN_ID }))}</b><div class="mt">${btn(t("Make my ID {b}", { b: ADMIN_ID }), "pf-adminid", { sm: true })}</div>`, "warn", "idcard") + "</div>" : ""}${pend ? notice(`<b>${esc(t("Waiting for admin approval"))}</b><br>${esc(t("Your account is created. The admin or a co-admin must approve it before you can open the other pages."))}`, "warn", "clock") : ""}
   <div class="card tc"><div style="display:flex;justify-content:center">${avatar(u, 92)}</div><h2 style="margin:10px 0 2px">${esc(u.name)}</h2>${tag(roleName(u), "info")}
     <div class="mt"><label class="btn btn--sm" style="cursor:pointer">${icon("camera")}${esc(t("Change photo"))}<input type="file" accept="image/*" data-change="pf-pic" hidden></label></div></div>
   <div class="mt">${card(t("My information"), `<div class="list">${info.map(([l, v]) => row({ title: v, sub: esc(l) })).join("")}${row({ title: u.phone || "–", sub: esc(t("Phone")) })}${row({ title: u.addr || "–", sub: esc(t("Address")) })}${row({ title: u.bg || "–", sub: esc(t("Blood group")) })}${st ? row({ title: u.gname || "–", sub: esc(t("Guardian Name")) }) + row({ title: u.gphone || "–", sub: esc(t("Guardian's phone")) }) + row({ title: u.gem || "–", sub: esc(t("Guardian's email")) }) : ""}</div><div class="row mt">${btn(t("Edit"), "pf-edit", { ic: "edit" })}${u.role === "admin" ? btn(t("My ID card"), "id-show", { arg: S.pid, ic: "idcard" }) : ""}</div>`)}</div>
@@ -213,6 +230,11 @@ act("st-test", async () => {
 });
 
 addBN({
+  "Your login ID is {a}, but the admin's ID is {b}.": "আপনার লগইন আইডি {a}, কিন্তু অ্যাডমিনের আইডি {b}।", "Make my ID {b}": "আমার আইডি {b} করুন", "Change my ID": "আইডি বদলান", "Change ID": "আইডি বদলান",
+  "Your ID is already {b}": "আপনার আইডি আগে থেকেই {b}", "Your ID is now {b}": "আপনার আইডি এখন {b}",
+  "{n} has {b} now. You and {n} swap IDs: you get {b}, {n} gets {a}. Both of you sign in with the new ID from now on.": "{b} এখন {n}-এর কাছে আছে। আপনি আর {n} আইডি অদলবদল করবেন: আপনি {b} পাবেন, {n} পাবেন {a}। এখন থেকে দুজনেই নতুন আইডি দিয়ে লগইন করবেন।",
+  "Your login ID changes from {a} to {b}. Sign in with {b} from now on.": "আপনার লগইন আইডি {a} থেকে বদলে {b} হবে। এখন থেকে {b} দিয়ে লগইন করবেন।",
+  "Only the main admin can do this.": "শুধু প্রধান অ্যাডমিন এটা করতে পারেন।", "The change could not be confirmed. Reload the page.": "পরিবর্তনটা নিশ্চিত করা যায়নি। পেজ রিলোড করুন।", "Your login ID is now {id}.": "আপনার লগইন আইডি এখন {id}।",
   "Scan to verify": "যাচাই করতে স্ক্যান করুন",
   "ADMIN ID CARD": "অ্যাডমিন আইডি কার্ড", "STUDENT ID CARD": "ছাত্র আইডি কার্ড", "TEACHER ID CARD": "শিক্ষক আইডি কার্ড", "Roll": "রোল", "Class": "ক্লাস", "Batch": "ব্যাচ", "Guardian Name": "অভিভাবকের নাম", "Guardian Phone": "অভিভাবকের ফোন", "ID": "আইডি", "Blood group": "রক্তের গ্রুপ", "Session": "সেশন",
   "This card is the property of {n}. It must be shown when asked.": "এই কার্ডটি {n} এর সম্পত্তি। চাইলে দেখাতে হবে।", "If found, please return it to the academy.": "পাওয়া গেলে দয়া করে একাডেমিতে ফেরত দিন।", "Phone": "ফোন", "Authorized signature": "অনুমোদিত স্বাক্ষর",

@@ -2,7 +2,7 @@
 // database only through this module, so nothing else needs to know about Firebase.
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-  initializeAuth, getAuth, browserLocalPersistence, indexedDBLocalPersistence,
+  initializeAuth, browserLocalPersistence, indexedDBLocalPersistence, inMemoryPersistence,
   signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut,
   onAuthStateChanged, updatePassword, EmailAuthProvider, reauthenticateWithCredential, sendPasswordResetEmail,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -107,17 +107,21 @@ export async function confirmPassword(pw) {
 // (tdb = the same database api, but acting as the new user).
 export async function withNewAccount(email, pw, fn) {
   const tapp = initializeApp(cfg, "t" + Date.now() + Math.random().toString(36).slice(2, 6));
-  const a2 = getAuth(tapp);
+  // initializeAuth + in-memory, NOT getAuth(): on a phone browser getAuth() opens a hidden Google page (the popup/redirect helper: an
+  // iframe + apis.google.com) before it lets createUser finish, and where that is slow or blocked the account is never made ("Making the
+  // login is taking too long"). The main app's auth above is made without it for the same reason. This account is only needed for a moment,
+  // so nothing is saved on the device either.
+  const a2 = initializeAuth(tapp, { persistence: inMemoryPersistence });
   let cred = null;
   try {
     cred = await createUserWithEmailAndPassword(a2, email, pw);
     return await fn(cred.user.uid, makeApi(getFirestore(tapp)));
   } catch (e) {
-    if (cred) { try { await cred.user.delete(); } catch (x) { /* ignore */ } }
+    if (cred) { try { await Promise.race([cred.user.delete(), new Promise((r) => setTimeout(r, 4000))]); } catch (x) { /* ignore */ } }
     throw e;
   } finally {
-    try { await signOut(a2); } catch (x) { /* ignore */ }
-    try { await deleteApp(tapp); } catch (x) { /* ignore */ }
+    // clearing up must never hold the result back
+    await Promise.race([(async () => { try { await signOut(a2); } catch (x) { /* ignore */ } try { await deleteApp(tapp); } catch (x) { /* ignore */ } })(), new Promise((r) => setTimeout(r, 3000))]);
   }
 }
 

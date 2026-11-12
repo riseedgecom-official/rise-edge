@@ -244,6 +244,42 @@ export async function resetPassword(u) {
   return pw;
 }
 
+// ---------- the admin's login ID is ADMIN_ID (REAT-2026-001) ----------
+// The writes that give `u` (a user document with its id) the ID ADMIN_ID. The login lookup (login/<roll> -> the person's real address) is
+// what makes an ID work, so moving an ID = moving lookups; no Firebase account is touched.
+//  - nobody else holds ADMIN_ID: the old ID of `u` is freed (the next person gets it, see nextFree)
+//  - an older teacher holds it: the two swap, the teacher gets the old ID of `u`
+// Returns null when `u` already has it (or has no roll: that admin signs in with the email), else { ops, swap: {id, name, roll} | null }.
+export async function adminIdPlan(u) {
+  const R = u && u.roll ? String(u.roll) : "";
+  if (!R || R === ADMIN_ID) return null;
+  const key = ADMIN_ID.toLowerCase(), rk = R.toLowerCase();
+  const [mine, l1, holders] = await Promise.all([db.get("login/" + rk), db.get("login/" + key), db.list("users", ["roll", "==", ADMIN_ID])]);
+  const other = holders.find((x) => x.id !== u.id) || null;
+  const es = (l, fallback) => (l && Array.isArray(l.es) && l.es.length ? l.es : [fallback]);
+  const ops = [];
+  if (other) ops.push({ upd: ["users/" + other.id, { roll: R }] }, { set: ["login/" + rk, { es: es(l1, other.email || authEmail(ADMIN_ID)) }] });
+  else ops.push({ del: "login/" + rk });
+  ops.push({ set: ["login/" + key, { es: es(mine, u.email || authEmail(R)) }] }, { upd: ["users/" + u.id, { roll: ADMIN_ID }] });
+  return { ops, swap: other ? { id: other.id, name: other.name || "", roll: R } : null };
+}
+// The main admin takes ADMIN_ID. One batch; the teacher who gave it up gets a notice.
+export async function claimAdminId() {
+  const me = S.me;
+  if (!me || me.role !== "admin" || me.co) throw new Error(t("Only the main admin can do this."));
+  const u = await db.get("users/" + S.pid);
+  const plan = await adminIdPlan(u);
+  if (!plan) return null;
+  const ops = plan.ops.slice();
+  if (plan.swap) ops.push({ set: ["nt/" + timeId(), { to: plan.swap.id, t: t("Your login ID is now {id}.", { id: plan.swap.roll }), d: Date.now() }] });
+  await db.batch(ops);
+  const now = await db.get("users/" + S.pid);
+  if (!now || now.roll !== ADMIN_ID) throw new Error(t("The change could not be confirmed. Reload the page."));
+  S.me.roll = ADMIN_ID;
+  if (plan.swap) { const x = [...S.TC, ...S.U].find((y) => y.id === plan.swap.id); if (x) x.roll = plan.swap.roll; }
+  return plan.swap;
+}
+
 // ---------- admin transfer ----------
 // The main admin hands the admin role to a teacher. ONE atomic batch: the teacher becomes admin, the old admin becomes a
 // co-admin (so access is never lost) and a history entry is written. Nothing changes unless all of it is saved.
@@ -269,16 +305,19 @@ export async function transferAdmin(toId) {
       break;
     }
   }
+  const idp = await adminIdPlan({ ...to, id: toId });   // the new admin signs in with ADMIN_ID from now on
+  if (idp) ops.push(...idp.ops);
   ops.push(
     { upd: ["users/" + toId, { role: "admin", ca: false, ta: now }] },
     { upd: ["users/" + S.pid, back] },
     { set: ["xfer/" + timeId(), { from: S.pid, fromName: from.name || "", fromEmail: from.email || "", to: toId, toName: to.name || "", toRoll: to.roll || "", wasCo: to.ca === true, t: now, d: T() }] },
-    { set: ["nt/" + timeId(), { to: toId, t: t("You are now the admin of {n}. Reload the app to see the admin menu.", { n: (S.INST && S.INST.name) || "Rise Edge Academy" }), d: now }] },
+    { set: ["nt/" + timeId(), { to: toId, t: t("You are now the admin of {n}. Reload the app to see the admin menu.", { n: (S.INST && S.INST.name) || "Rise Edge Academy" }) + (idp ? " " + t("Your login ID is now {id}.", { id: ADMIN_ID }) : ""), d: now }] },
   );
+  if (idp && idp.swap && idp.swap.id !== S.pid) ops.push({ set: ["nt/" + timeId() + "x", { to: idp.swap.id, t: t("Your login ID is now {id}.", { id: idp.swap.roll }), d: now }] });
   await db.batch(ops);
   const [a, b] = await Promise.all([db.get("users/" + toId), db.get("users/" + S.pid)]);   // make sure somebody is admin
   if (!a || a.role !== "admin" || !b || b.role !== "teacher" || b.ca !== true) throw new Error(t("The transfer could not be confirmed. Open the Admin transfer page and check the history."));
-  return { toName: to.name || "", wasCo: to.ca === true };
+  return { toName: to.name || "", wasCo: to.ca === true, toRoll: idp ? ADMIN_ID : to.roll || "" };
 }
 
 // Deleting a person: the profile, the login and everything that belongs to the person. The roll number is free again afterwards (see nextFree),

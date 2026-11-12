@@ -39,12 +39,13 @@ act("xf-start", async () => {
     },
   });
   if (!done) return;
-  await info(t("Done. {n} is now the admin. You are a co-admin. The app will reload now.", { n: done.toName }), t("Admin transferred"));
+  await info(t("Done. {n} is now the admin. You are a co-admin. The app will reload now.", { n: done.toName }) + (done.toRoll ? " " + t("Their login ID is now {id}.", { id: done.toRoll }) : ""), t("Admin transferred"));
   location.hash = "#/dashboard";
   location.reload();
 });
 
 addBN({
+  "Their login ID is now {id}.": "তাঁর লগইন আইডি এখন {id}।", "Your login ID is now {id}.": "আপনার লগইন আইডি এখন {id}।",
   "Only the main admin can open this page.": "শুধু প্রধান অ্যাডমিন এই পাতা খুলতে পারেন।", "Admin transfer": "অ্যাডমিন হস্তান্তর", "Current admin (you)": "বর্তমান অ্যাডমিন (আপনি)",
   "Give the admin role to one of your teachers. The new admin controls everything, including fees, salary and settings.": "আপনার একজন শিক্ষককে অ্যাডমিনের দায়িত্ব দিন। নতুন অ্যাডমিন ফি, বেতন ও সেটিংস সহ সবকিছু নিয়ন্ত্রণ করবেন।",
   "You become a co-admin, so you keep access to students, batches, attendance and exams.": "আপনি কো-অ্যাডমিন হবেন, তাই ছাত্র, ব্যাচ, উপস্থিতি ও পরীক্ষার অ্যাক্সেস থাকবে।",
