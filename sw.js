@@ -1,7 +1,7 @@
 // Rise Edge Academy - keeps the app files so it can be installed and open fast.
 // Network first: a new version is always picked up when online; the saved copy is used offline.
-const C = "rise-v1", SHARE = "rise-share";
-const FILES = ["./", "index.html", "app.css", "app.js", "config.js", "logo.jpg", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
+const C = "rise-v3", SHARE = "rise-share";
+const FILES = ["./", "index.html", "portal.html", "app.css", "theme.css", "app.js", "ticker.js", "config.js", "logo.jpg", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(C).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()).catch(() => self.skipWaiting()));
 });
@@ -21,7 +21,7 @@ self.addEventListener("fetch", (e) => {
           if (v && typeof v !== "string") await c.put(self.registration.scope + "sf" + (i++), new Response(v, { headers: { "Content-Type": v.type || "application/octet-stream", "X-Name": encodeURIComponent(v.name || "file") } }));
         }
       } catch (x) { /* ignore */ }
-      return Response.redirect(self.registration.scope + "?share=1", 303);
+      return Response.redirect(self.registration.scope + "portal.html?share=1", 303);
     })());
     return;
   }
@@ -29,6 +29,6 @@ self.addEventListener("fetch", (e) => {
   e.respondWith(
     fetch(r, { cache: "no-cache" })
       .then((x) => { if (x.ok) { const y = x.clone(); caches.open(C).then((c) => c.put(r, y)); } return x; })
-      .catch(() => caches.match(r).then((m) => m || caches.match("index.html")))
+      .catch(() => caches.match(r).then((m) => m || caches.match("portal.html")))
   );
 });

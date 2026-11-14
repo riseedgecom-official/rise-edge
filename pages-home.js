@@ -11,6 +11,9 @@ const tiles = (list) => `<div class="tiles">${list.join("")}</div>`;
 const nav = (pg) => ({ act: "nav", arg: pg });
 const today = () => new Date().toLocaleDateString(S.lang === "bn" ? "bn-BD" : "en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 const welcome = (sub) => `<div class="welcome">${avatar(S.me, 56)}<div><h2>${esc(t("Welcome back, {n}!", { n: S.me.name }))}</h2><p class="mut">${esc(sub || today())}</p></div></div>`;
+// the top of every dashboard: greeting, and (when there are numbers) the rings in a white panel (theme.css)
+const hero = (sub, rings, cap) => `<section class="hero">${welcome(sub)}${rings ? `<div class="hero-rings">${cap ? `<div class="mut sm" style="margin-bottom:8px">${esc(cap)}</div>` : ""}<div class="rings">${rings}</div></div>` : ""}</section>`;
+const sec = (title, html) => (html ? `<div class="sec-t">${esc(t(title))}</div>${html}` : "");
 
 // ---------- small cards ----------
 const standalone = () => { try { return window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true; } catch (e) { return false; } };
@@ -74,19 +77,24 @@ async function staffHome() {
   const teachers = S.TC.filter(active).length;
   // fee overview (admin only), batch overview and today's absent students; they reuse what was just read
   const [fo, bo, abs] = await Promise.all([fees ? lazy("pages-fees.js", "feeOverviewCard", { m, P, BF }) : "", lazy("pages-people.js", "batchOverview"), lazy("pages-attendance.js", "absentToday", docs)]);
-  return `${welcome()}${pwNote()}${installCard()}
-  <div class="card mt"><div class="rings">${ring(pres + ab ? (pres / (pres + ab)) * 100 : null, t("Attendance today"), "var(--ok)")}${fees ? ring(billed.length ? ((billed.length - due) / billed.length) * 100 : null, t("Fees paid"), "var(--blue)") : ""}</div></div>
-  <div class="mt">${tiles([
+  const rings = ring(pres + ab ? (pres / (pres + ab)) * 100 : null, t("Attendance today"), "var(--ok)") + (fees ? ring(billed.length ? ((billed.length - due) / billed.length) * 100 : null, t("Fees paid"), "var(--blue)") : "");
+  const attention = [
+    S.PEND.length || fp.length ? `<div class="mt">${notice(`${S.PEND.length ? `${esc(t("Registrations waiting for approval"))}: <b>${S.PEND.length}</b>. ` : ""}${fp.length ? `${esc(t("Password help requests"))}: <b>${fp.length}</b>. ` : ""}${btn(t("Open"), "nav", { arg: "approvals", sm: true })}`, "warn", "user")}</div>` : "",
+    mk ? `<div class="mt">${notice(`${esc(t("Marks waiting for approval"))}: <b>${mk}</b>. ${btn(t("Open"), "nav", { arg: "marks", sm: true })}`, "info")}</div>` : "",
+    pr ? `<div class="mt">${pr}</div>` : "",
+  ].join("");
+  return `${pwNote()}${hero(undefined, rings)}${installCard()}
+  ${tiles([
     stat({ ic: "users", label: t("Students"), value: A.length, color: "var(--blue)", ...nav("students") }),
     stat({ ic: "check", label: t("Present today"), value: pres, color: "var(--ok)", ...nav("attendance") }),
     stat({ ic: "x", label: t("Absent today"), value: ab, color: "var(--bad)", ...nav("attendance") }),
     ...(fees ? [stat({ ic: "wallet", label: t("Unpaid fees: {m}", { m: monthLabel(m) }), value: due, color: "var(--gold-ink)", ...nav("fees") })] : []),
     stat({ ic: "mega", label: t("Pending requests"), value: rq || 0, color: "#6a4cf0", ...nav("requests") }),
     stat({ ic: "cap", label: t("Teachers"), value: teachers, color: "#0a9aa8", ...nav("teachers") }),
-  ])}</div>
-  ${S.PEND.length || fp.length ? `<div class="mt">${notice(`${S.PEND.length ? `${esc(t("Registrations waiting for approval"))}: <b>${S.PEND.length}</b>. ` : ""}${fp.length ? `${esc(t("Password help requests"))}: <b>${fp.length}</b>. ` : ""}${btn(t("Open"), "nav", { arg: "approvals", sm: true })}`, "warn", "user")}</div>` : ""}
-  ${mk ? `<div class="mt">${notice(`${esc(t("Marks waiting for approval"))}: <b>${mk}</b>. ${btn(t("Open"), "nav", { arg: "marks", sm: true })}`, "info")}</div>` : ""}
-  ${pr ? `<div class="mt">${pr}</div>` : ""}${fo ? `<div class="mt">${fo}</div>` : ""}${bo ? `<div class="mt">${bo}</div>` : ""}${ranks ? `<div class="mt">${ranks}</div>` : ""}${abs ? `<div class="mt">${abs}</div>` : ""}`;
+  ])}
+  ${sec("Needs attention", attention)}
+  ${sec("Quick actions", quick([["attendance", "calcheck", "Attendance"], ["exams", "clip", "Exams"], ["students", "users", "Students"], ["teachers", "cap", "Teachers"], ...(fees ? [["fees", "wallet", "Fees"]] : []), ["resultsheet", "trophy", "Result sheet"]]))}
+  ${fo ? `<div class="mt">${fo}</div>` : ""}${bo ? `<div class="mt">${bo}</div>` : ""}${ranks ? `<div class="mt">${ranks}</div>` : ""}${abs ? `<div class="mt">${abs}</div>` : ""}`;
 }
 
 // ---------- teacher ----------
@@ -105,16 +113,16 @@ async function teacherHome() {
     const sj = (S.me.sj || {})[b.id];
     return row({ title: b.name, sub: esc(t("{n} students", { n: L.length }) + (sj && sj.length ? " · " + sj.join(", ") : "")), right: `<b class="${x ? "ok" : "warn"}">${esc(pc)}</b>${btn(t("Attendance"), "hm-att", { arg: b.id, sm: true, ic: "calcheck" })}` });
   };
-  return `${welcome(t("Here is an overview of your classes today."))}${pwNote()}${installCard()}
-  <div class="mt">${tiles([
+  return `${pwNote()}${hero(t("Here is an overview of your classes today."))}${installCard()}
+  ${tiles([
     stat({ ic: "users", label: t("Students"), value: A.length, color: "var(--blue)", sub: t("Your classes") }),
     stat({ ic: "layers", label: t("My batches"), value: S.B.length, color: "var(--ok)" }),
     stat({ ic: "check", label: t("Attendance taken"), value: `${done} / ${S.B.length}`, color: "var(--gold-ink)", sub: t("Today"), ...nav("attendance") }),
     stat({ ic: "plus", label: t("Add student"), value: "+", sub: t("New registration"), color: "#6a4cf0", act: "tch-addstu" }),
-  ])}</div>
+  ])}
+  ${sec("Quick actions", quick([["attendance", "calcheck", "Attendance"], ["exams", "clip", "Exams"], ["performance", "trend", "Performance"], ["syllabus", "list", "Syllabus"]]))}
   <div class="mt">${card(t("My classes"), S.B.length ? `<div class="list">${S.B.map(rowOf).join("")}</div>` : empty(t("No batch assigned yet."), "layers"))}</div>
   ${cls ? `<div class="mt">${cls}</div>` : ""}${sal ? `<div class="mt">${sal}</div>` : ""}
-  <div class="mt">${quick([["attendance", "calcheck", "Attendance"], ["exams", "clip", "Exams"], ["performance", "trend", "Performance"], ["syllabus", "list", "Syllabus"]])}</div>
   ${ranks ? `<div class="mt">${ranks}</div>` : ""}`;
 }
 act("hm-att", (el) => { S.bid = el.dataset.arg; location.hash = "#/attendance"; });
@@ -127,12 +135,14 @@ async function studentHome() {
   const [st, fee, cls, nts, rr, pf] = await Promise.all([getStats(me.bid), lazy("pages-fees.js", "feeSummaryCard"), lazy("pages-attendance.js", "todayClasses"), noticeCard(), lazy("pages-exams.js", "recentResults"), lazy("pages-perf.js", "recentPerf")]);
   const r = (st.rows || {})[S.pid] || {}, n = st.n || 0;
   const att = (r.p || 0) + (r.a || 0) ? ((r.p || 0) / ((r.p || 0) + (r.a || 0))) * 100 : null;
-  return `${welcome(`${b.name} · ${today()}`)}${pwNote()}${installCard()}
-  <div class="card mt"><div class="card-h"><h3>${esc(t("This month"))}</h3>${st.from ? `<span class="mut sm">${esc(t("Counted from {d}.", { d: fmtDate(st.from) }))}</span>` : ""}</div>
-    <div class="rings">${ring(att, t("Attendance"), "var(--ok)")}${ring(r.ex, t("Exam average"), "#6a4cf0")}${ring(r.pf, t("Performance"), "var(--gold)")}</div>
-    <div class="tiles mt">${stat({ ic: "trophy", label: t("Exam rank"), value: r.er ? "#" + r.er : "–", sub: n ? t("of {n} students", { n }) : "", color: "#6a4cf0", ...nav("exams") })}${stat({ ic: "star", label: t("Overall"), value: f1(r.ov), sub: r.or ? t("Rank #{r} of {n}", { r: r.or, n }) : "", color: "var(--blue)", ...nav("reports") })}</div></div>
-  ${rr ? `<div class="mt">${rr}</div>` : ""}${pf ? `<div class="mt">${pf}</div>` : ""}${cls ? `<div class="mt">${cls}</div>` : ""}${fee ? `<div class="mt">${fee}</div>` : ""}${nts ? `<div class="mt">${nts}</div>` : ""}
-  <div class="mt">${quick([["performance", "trend", "Performance"], ["exams", "clip", "Results"], ["syllabus", "list", "Syllabus"], ["reports", "chart", "Report"], ["requests", "mega", "Requests"], ["idcard", "idcard", "ID card"]])}</div>`;
+  const rings = ring(att, t("Attendance"), "var(--ok)") + ring(r.ex, t("Exam average"), "#6a4cf0") + ring(r.pf, t("Performance"), "var(--gold)");
+  return `${pwNote()}${hero(`${b.name} · ${today()}`, rings, t("This month") + (st.from ? " · " + t("Counted from {d}.", { d: fmtDate(st.from) }) : ""))}${installCard()}
+  ${tiles([
+    stat({ ic: "trophy", label: t("Exam rank"), value: r.er ? "#" + r.er : "–", sub: n ? t("of {n} students", { n }) : "", color: "#6a4cf0", ...nav("exams") }),
+    stat({ ic: "star", label: t("Overall"), value: f1(r.ov), sub: r.or ? t("Rank #{r} of {n}", { r: r.or, n }) : "", color: "var(--blue)", ...nav("reports") }),
+  ])}
+  ${sec("Quick actions", quick([["performance", "trend", "Performance"], ["exams", "clip", "Results"], ["syllabus", "list", "Syllabus"], ["reports", "chart", "Report"], ["requests", "mega", "Requests"], ["idcard", "idcard", "ID card"]]))}
+  ${rr ? `<div class="mt">${rr}</div>` : ""}${pf ? `<div class="mt">${pf}</div>` : ""}${cls ? `<div class="mt">${cls}</div>` : ""}${fee ? `<div class="mt">${fee}</div>` : ""}${nts ? `<div class="mt">${nts}</div>` : ""}`;
 }
 
 page("dashboard", async () => {
@@ -150,5 +160,5 @@ addBN({
   "Registrations waiting for approval": "অনুমোদনের অপেক্ষায় রেজিস্ট্রেশন", "Password help requests": "পাসওয়ার্ড সাহায্যের অনুরোধ", "Open": "খুলুন", "{n} students": "{n} জন ছাত্র", "Attendance": "উপস্থিতি", "Not taken": "নেওয়া হয়নি", "Here is an overview of your classes today.": "আজকের ক্লাসের সারসংক্ষেপ।",
   "Your classes": "আপনার ক্লাস", "My batches": "আমার ব্যাচ", "Attendance taken": "উপস্থিতি নেওয়া হয়েছে", "Today": "আজ", "My classes": "আমার ক্লাস", "No batch assigned yet.": "এখনো কোনো ব্যাচ দেওয়া হয়নি।", "Exams": "পরীক্ষা", "Homework": "হোমওয়ার্ক", "Syllabus": "সিলেবাস",
   "You are not in a batch yet. The admin will add you to one.": "আপনি এখনো কোনো ব্যাচে নেই। অ্যাডমিন আপনাকে একটি ব্যাচে যোগ করবেন।", "This month": "এই মাস", "Counted from {d}.": "{d} থেকে গণনা।", "Exam average": "পরীক্ষার গড়", "Exam rank": "পরীক্ষার র‍্যাঙ্ক", "of {n} students": "{n} জনের মধ্যে",
-  "Marks waiting for approval": "অনুমোদনের অপেক্ষায় নম্বর", "Overall": "সার্বিক", "Rank #{r} of {n}": "র‍্যাঙ্ক #{r} / {n}", "Results": "ফলাফল", "Report": "রিপোর্ট", "Requests": "অনুরোধ", "ID card": "আইডি কার্ড",
+  "Needs attention": "মনোযোগ দরকার", "Quick actions": "দ্রুত কাজ", "Marks waiting for approval": "অনুমোদনের অপেক্ষায় নম্বর", "Overall": "সার্বিক", "Rank #{r} of {n}": "র‍্যাঙ্ক #{r} / {n}", "Results": "ফলাফল", "Report": "রিপোর্ট", "Requests": "অনুরোধ", "ID card": "আইডি কার্ড",
 });

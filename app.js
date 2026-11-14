@@ -9,6 +9,7 @@ import {
 import { icon, avatar, toast, closeDoc, closeModals, modal, notice, empty, btn } from "./lib-ui.js";
 import { setMe, loadCore, getNotices, unseenCount, ensureDefaultBatches, saveInst, loadInst } from "./lib-svc.js";
 import { renderLogin, renderNotConfigured, forceNewPassword, authRedraw } from "./pages-auth.js";
+import { tickerHtml, mountTicker } from "./ticker.js";
 
 const $app = () => document.getElementById("app");
 const roleCode = () => (isAdmin() ? "a" : isStaff() ? "c" : isTeacher() ? "t" : "s");
@@ -82,10 +83,12 @@ function drawShell() {
     ${pendingOnly() ? "" : `<button class="icon-btn" data-act="nav" data-arg="alerts" aria-label="${esc(t("Alerts"))}">${icon("bell")}<span class="dot" id="bell" ${S.unseen ? "" : "hidden"}>${S.unseen || ""}</span></button>`}
     <button class="who" data-act="nav" data-arg="profile" aria-label="${esc(t("Profile"))}">${avatar(S.me, 38)}</button>
   </header>
+  ${pendingOnly() ? "" : tickerHtml()}
   <main class="main" id="view" tabindex="-1"></main>
   <nav class="tabbar" aria-label="Tabs">${tabs.map((n) => `<button data-nav="${n.k}" data-act="nav" data-arg="${n.k}">${icon(n.ic)}<span>${esc(t(n.l))}</span></button>`).join("")}${more}</nav>
 </div>`;
   markNav();
+  mountTicker();
 }
 function markNav() {
   $$("[data-nav]").forEach((b) => b.classList.toggle("on", b.dataset.nav === S.page));

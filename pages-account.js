@@ -205,6 +205,9 @@ page("settings", async () => {
     ${input("phone", { label: t("Phone"), value: I.phone || "", type: "tel" })}
     ${input("addr", { label: t("Address"), value: I.addr || "", maxlength: "200" })}
     <button class="btn btn--pri" type="submit">${icon("check")}${esc(t("Save"))}</button></form>
+  <form class="card stack-s mt" data-submit="st-ticker"><h3>${esc(t("News ticker"))}</h3>
+    ${textarea("ticker", { label: t("Headlines"), rows: 6, value: (Array.isArray(I.ticker) ? I.ticker : []).join("\n"), placeholder: t("Example: Admission open for the new batch"), hint: t("One headline per line, up to 12. They run under the top bar for everybody, together with the latest batch notices.") })}
+    <button class="btn btn--pri" type="submit">${icon("check")}${esc(t("Save"))}</button></form>
   <form class="card stack-s mt" data-submit="st-mail"><h3>${esc(t("Email (EmailJS)"))}</h3>
     <p class="mut sm">${esc(t("Optional and free. It sends absent alerts and results to guardians' emails. See the README for the 5-minute setup."))}</p>
     ${input("pk", { label: t("Public key"), value: m.pk || "" })}${input("sid", { label: t("Service ID"), value: m.sid || "" })}${input("t2", { label: t("Template ID"), value: m.t2 || "", hint: t("The template uses {{to_email}}, {{to_name}}, {{subject}}, {{message}}.") })}
@@ -214,6 +217,13 @@ onSubmit("st-inst", async (b) => {
   const f = formData(b.closest("form"));
   if (!f.name.trim()) return toast(t("Enter the institute name"), "bad");
   await saveInst({ name: f.name.trim(), tag: f.tag.trim(), owner: f.owner.trim(), phone: f.phone.trim(), addr: f.addr.trim() });
+  window.dispatchEvent(new Event("rise-me"));
+  toast(t("Saved"), "ok");
+});
+onSubmit("st-ticker", async (b) => {
+  const f = formData(b.closest("form"));
+  const list = String(f.ticker || "").split("\n").map((x) => x.trim()).filter(Boolean).slice(0, 12).map((x) => x.slice(0, 140));
+  await saveInst({ ticker: list });
   window.dispatchEvent(new Event("rise-me"));
   toast(t("Saved"), "ok");
 });
@@ -242,7 +252,7 @@ addBN({
   "Login ID": "লগইন আইডি", "Role": "ভূমিকা", "School / college": "স্কুল / কলেজ", "Subject": "বিষয়", "Email": "ইমেইল", "Waiting for admin approval": "অ্যাডমিনের অনুমোদনের অপেক্ষায়", "Your account is created. The admin or a co-admin must approve it before you can open the other pages.": "আপনার অ্যাকাউন্ট তৈরি হয়েছে। অন্য পেজ খোলার আগে অ্যাডমিন বা কো-অ্যাডমিনকে অনুমোদন দিতে হবে।",
   "Change photo": "ছবি বদলান", "My information": "আমার তথ্য", "Address": "ঠিকানা", "Guardian's phone": "অভিভাবকের ফোন", "Guardian's email": "অভিভাবকের ইমেইল", "Edit": "সম্পাদনা", "Account": "অ্যাকাউন্ট", "Change password": "পাসওয়ার্ড বদলান", "Logout": "লগআউট", "Saved": "সংরক্ষিত", "Name": "নাম",
   "Enter your full name.": "পুরো নাম দিন।", "Enter a valid phone number (01XXXXXXXXX).": "সঠিক ফোন নম্বর দিন (01XXXXXXXXX)।", "Enter a valid guardian phone number (01XXXXXXXXX).": "অভিভাবকের সঠিক ফোন নম্বর দিন (01XXXXXXXXX)।", "The guardian email looks wrong.": "অভিভাবকের ইমেইলটি ঠিক মনে হচ্ছে না।",
-  "Current password": "বর্তমান পাসওয়ার্ড", "Institute": "প্রতিষ্ঠান", "Institute name": "প্রতিষ্ঠানের নাম", "Tagline (shown on the ID card)": "ট্যাগলাইন (আইডি কার্ডে দেখাবে)", "Owner / principal name": "মালিক / অধ্যক্ষের নাম", "Email (EmailJS)": "ইমেইল (EmailJS)",
+  "Current password": "বর্তমান পাসওয়ার্ড", "Institute": "প্রতিষ্ঠান", "News ticker": "সংবাদ টিকার", "Headlines": "শিরোনাম", "Example: Admission open for the new batch": "যেমন: নতুন ব্যাচে ভর্তি চলছে", "One headline per line, up to 12. They run under the top bar for everybody, together with the latest batch notices.": "প্রতি লাইনে একটি শিরোনাম, সর্বোচ্চ ১২টি। সবার টপ বারের নিচে চলবে, সাথে ব্যাচের সর্বশেষ নোটিশ।", "News": "খবর", "Welcome to {n}": "{n} এ স্বাগতম", "Institute name": "প্রতিষ্ঠানের নাম", "Tagline (shown on the ID card)": "ট্যাগলাইন (আইডি কার্ডে দেখাবে)", "Owner / principal name": "মালিক / অধ্যক্ষের নাম", "Email (EmailJS)": "ইমেইল (EmailJS)",
   "Optional and free. It sends absent alerts and results to guardians' emails. See the README for the 5-minute setup.": "ঐচ্ছিক ও বিনামূল্যে। অভিভাবকের ইমেইলে অনুপস্থিতির বার্তা ও ফল পাঠায়। ৫ মিনিটের সেটআপ README তে আছে।", "Public key": "পাবলিক কি", "Service ID": "সার্ভিস আইডি", "Template ID": "টেমপ্লেট আইডি",
   "The template uses {{to_email}}, {{to_name}}, {{subject}}, {{message}}.": "টেমপ্লেটে {{to_email}}, {{to_name}}, {{subject}}, {{message}} ব্যবহার করুন।", "Send test email": "টেস্ট ইমেইল পাঠান", "Enter the institute name": "প্রতিষ্ঠানের নাম দিন", "Your profile has no email address.": "আপনার প্রোফাইলে ইমেইল ঠিকানা নেই।",
   "Test email": "টেস্ট ইমেইল", "This is a test email from {n}.": "এটি {n} থেকে একটি টেস্ট ইমেইল।", "Email sent": "ইমেইল পাঠানো হয়েছে", "Student": "ছাত্র", "Teacher": "শিক্ষক", "Admin": "অ্যাডমিন", "Co-admin": "কো-অ্যাডমিন", "Save": "সংরক্ষণ",

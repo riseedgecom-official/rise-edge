@@ -1,0 +1,31 @@
+/* Rise Edge Academy - theme layer on top of app.css: news ticker and the dashboard hero. */
+:root{--grad:linear-gradient(135deg,#2563eb,#7c3aed)}
+
+[hidden]{display:none!important}
+
+/* ---------- news ticker (under the top bar; --topH is set by ticker.js to the real height of the bar) ---------- */
+.ticker{position:sticky;top:var(--topH,59px);z-index:5;height:40px;display:flex;align-items:center;
+  background:#0b1b3f;color:#fff;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.tk-badge{flex:none;height:100%;display:flex;align-items:center;padding:0 14px;
+  background:var(--grad);font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+.tk-win{flex:1;min-width:0;overflow:hidden}
+.tk-track{display:inline-flex;white-space:nowrap;animation:tk-run 40s linear infinite}
+.tk-set{display:inline-flex}
+@media (hover:hover){.tk-track:hover{animation-play-state:paused}}
+.tk-i{padding:0 28px;font-size:14px}
+.tk-i::before{content:"•";margin-right:28px;color:#fbbf24}
+@keyframes tk-run{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@media (prefers-reduced-motion:reduce){.tk-track{animation:none}.tk-dup{display:none}.tk-win{overflow-x:auto}}
+@media print{.ticker{display:none!important}}
+
+/* ---------- dashboard hero ---------- */
+.hero{background:var(--grad);color:#fff;border-radius:20px;padding:20px;
+  box-shadow:0 10px 30px rgba(37,99,235,.25);margin-bottom:16px}
+.hero .welcome{margin-bottom:0}
+.hero .welcome h2{color:#fff}
+.hero .mut{color:rgba(255,255,255,.86)}
+.hero-rings{--ink:#14213d;--ink-2:#4a5878;--soft:#e3e9f6;margin-top:14px;
+  background:rgba(255,255,255,.95);color:#14213d;border-radius:16px;padding:12px}
+.hero-rings .rings{grid-template-columns:repeat(auto-fit,minmax(84px,1fr));gap:8px}   /* three rings stay in one row on a phone */
+.hero-rings .mut{color:#4a5878}
+.sec-t{font-weight:700;font-size:15px;margin:20px 0 10px}
