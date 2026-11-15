@@ -1,41 +1,102 @@
-// News ticker under the top bar: the institute's own headlines (Settings > News ticker) and the latest notices of the person's batch.
-// Rebuilt by drawShell() in app.js (tickerHtml) and filled in afterwards (mountTicker): it never blocks a page.
-import { S, esc, t, instName } from "./lib-core.js";
+// Notice ticker under the top bar (design: Live_Notice_Ticker): a coloured bar, an amber "Notice" badge with a pulsing dot,
+// notices scrolling right to left, paused on hover / touch. The admin publishes, hides, edits and deletes them on the "News ticker" page.
+//   config/inst.ticker   [{id, t, on, c}]  (older versions saved plain strings: they still work and count as live)
+//   config/inst.tkSpeed  "slow" | "normal" | "fast"      config/inst.tkTheme  "blue" | "red" | "green" | "dark"
+// Plus the latest notices of the person's batch (last 30 days). With nothing to show the ticker is not drawn at all.
+// This file brings its own CSS and the layout is also set inline, so a missing or old theme.css can never break the page.
+import { S, esc, t } from "./lib-core.js";
 import { getNotices } from "./lib-svc.js";
 
-const MAX_AGE = 30 * 864e5;   // an old notice is not "news"
-const welcome = () => t("Welcome to {n}", { n: instName() });
-const own = () => (Array.isArray(S.INST && S.INST.ticker) ? S.INST.ticker : []).map((x) => String(x || "").trim()).filter(Boolean);
-const itemsHtml = (list) => list.map((x) => `<span class="tk-i">${esc(x)}</span>`).join("");
+export const SPEEDS = { slow: 35, normal: 60, fast: 100 };      // pixels a second
+export const THEMES = ["blue", "red", "green", "dark"];
+export const MAX_NOTICES = 30, MAX_TEXT = 200;
+const MAX_AGE = 30 * 864e5;                                     // an old batch notice is not "news"
+
+// the admin's notices, old or new format: [{id, t, on, c}]
+export function noticeList(inst = S.INST) {
+  const a = Array.isArray(inst && inst.ticker) ? inst.ticker : [];
+  return a.map((x, i) => {
+    if (typeof x === "string") return { id: "L" + i, t: x.trim(), on: true, c: 0 };
+    if (x && typeof x === "object") return { id: String(x.id || "L" + i), t: String(x.t || "").trim(), on: x.on !== false, c: +x.c || 0 };
+    return null;
+  }).filter((x) => x && x.t);
+}
+const speed = () => (SPEEDS[S.INST && S.INST.tkSpeed] ? S.INST.tkSpeed : "normal");
+const theme = () => (THEMES.includes(S.INST && S.INST.tkTheme) ? S.INST.tkTheme : "blue");
+const live = () => noticeList().filter((x) => x.on).map((x) => x.t);
+
+const CSS = `
+.nt{position:sticky;top:var(--topH,59px);z-index:5;display:flex;align-items:center;height:44px;padding:0 8px;overflow:hidden;color:#fff;background:#4338ca;box-shadow:0 2px 8px rgba(15,23,42,.18);transition:background .3s}
+.nt-red{background:#be123c}.nt-green{background:#047857}.nt-dark{background:#0f172a}
+.nt-badge{flex:none;display:flex;align-items:center;gap:8px;margin-right:10px;padding:6px 12px;border-radius:10px;background:#fbbf24;color:#0f172a;font:700 12px/1 inherit;font-family:inherit;box-shadow:0 1px 2px rgba(0,0,0,.18);position:relative;z-index:1}
+.nt-red .nt-badge{background:#fff;color:#be123c}.nt-green .nt-badge{background:#fcd34d}.nt-dark .nt-badge{background:#6366f1;color:#fff}
+.nt-dot{position:relative;flex:none;width:10px;height:10px;border-radius:50%;background:#dc2626}
+.nt-dot::after{content:"";position:absolute;inset:0;border-radius:50%;background:#dc2626;animation:nt-ping 1.5s cubic-bezier(0,0,.2,1) infinite}
+@keyframes nt-ping{0%{transform:scale(1);opacity:.75}75%,100%{transform:scale(2.5);opacity:0}}
+.nt-win{flex:1;min-width:0;height:100%;overflow:hidden;display:flex;align-items:center;cursor:pointer}
+.nt-track{display:inline-flex;white-space:nowrap;will-change:transform;animation:nt-run 30s linear infinite}
+.nt-win:hover .nt-track,.nt-win:active .nt-track{animation-play-state:paused}
+@keyframes nt-run{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.nt-set{display:inline-flex;flex:none;align-items:center}
+.nt-i{display:inline-flex;align-items:center;margin:0 22px;font-size:14px;font-weight:500;letter-spacing:.01em}
+.nt-i svg{flex:none;width:14px;height:14px;margin-right:9px;color:#fcd34d}
+.nt-sep{opacity:.4;user-select:none}
+.nt-hint{display:none;flex:none;align-items:center;gap:6px;margin-left:8px;padding-left:12px;border-left:1px solid rgba(255,255,255,.22);font-size:12px;color:rgba(255,255,255,.75)}
+.nt-hint svg{width:11px;height:11px}
+@media (min-width:768px){.nt-hint{display:flex}}
+@media (prefers-reduced-motion:reduce){.nt-track{animation:none}.nt-dup{display:none}.nt-win{overflow-x:auto}}
+@media print{.nt{display:none!important}}`;
+
+function css() {
+  if (typeof document === "undefined" || document.getElementById("nt-css")) return;
+  const s = document.createElement("style");
+  s.id = "nt-css"; s.textContent = CSS;
+  document.head.appendChild(s);
+}
+css();
+
+const HORN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v4h3l8 4V6L7 10z"/><path d="M18 9a4 4 0 010 6"/></svg>';
+const PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
+const item = (x) => `<span class="nt-i">${HORN}<span>${esc(x)}</span></span><span class="nt-sep">•</span>`;
+const setHtml = (list) => list.map(item).join("");
+// layout that must never depend on the stylesheet (inline); the look comes from the CSS above
+const BOX = "display:flex;align-items:center;height:44px;overflow:hidden";
+const SET = "display:inline-flex;flex:none;align-items:center";
+const set = (inner, dup) => `<span class="nt-set${dup ? " nt-dup" : ""}" ${dup ? 'aria-hidden="true" ' : ""}style="${SET}">${inner}</span>`;
 
 export function tickerHtml() {
-  return `<div class="ticker" id="ticker" role="marquee" aria-label="${esc(t("News"))}">
-    <span class="tk-badge">${esc(t("News"))}</span>
-    <div class="tk-win"><div class="tk-track" id="tkTrack"><span class="tk-set">${itemsHtml([...own(), welcome()])}</span></div></div>
+  const list = live();
+  return `<div class="nt nt-${theme()}" id="ticker" role="marquee" aria-label="${esc(t("Notice"))}" style="${list.length ? BOX : "display:none"}">
+    <span class="nt-badge"><span class="nt-dot"></span><span>${esc(t("Notice"))}</span></span>
+    <div class="nt-win" title="${esc(t("Hover to pause"))}" style="flex:1;min-width:0;overflow:hidden;display:flex;align-items:center"><div class="nt-track" id="tkTrack" style="display:inline-flex;white-space:nowrap">${set(setHtml(list))}</div></div>
+    <span class="nt-hint">${PAUSE}${esc(t("Hover to pause"))}</span>
   </div>`;
 }
 
 // the track holds the list twice so the loop has no gap; the list is repeated until one copy is wider than the window
-function fill(track, list) {
-  const one = itemsHtml(list), win = track.parentElement ? track.parentElement.clientWidth || 360 : 360;
+function fill(box, track, list) {
+  if (!list.length) { box.style.display = "none"; return; }
+  box.style.cssText = BOX;
+  const one = setHtml(list), win = (track.parentElement && track.parentElement.clientWidth) || 360;
+  track.innerHTML = set(one);
+  const first = track.firstElementChild;
   let n = 1;
-  track.innerHTML = `<span class="tk-set">${one}</span>`;
-  while (track.firstElementChild.offsetWidth < win && n < 12) { n++; track.firstElementChild.innerHTML = one.repeat(n); }
-  const set = track.firstElementChild.innerHTML, w = track.firstElementChild.offsetWidth;
-  track.innerHTML = `<span class="tk-set">${set}</span><span class="tk-set tk-dup" aria-hidden="true">${set}</span>`;
-  track.style.animationDuration = Math.max(20, Math.round((w || win) / 55)) + "s";   // about 55 px a second, whatever the length
+  while (first.offsetWidth > 0 && first.offsetWidth < win && n < 10) { n++; first.innerHTML = one.repeat(n); }
+  const inner = first.innerHTML, w = first.offsetWidth;
+  track.innerHTML = set(inner) + set(inner, true);
+  track.style.animationDuration = Math.max(8, Math.round((w || win) / SPEEDS[speed()])) + "s";
 }
 
 // the sticky ticker sits right under the top bar: take the real height of the bar
-let ro = null;
+let ro = null, rz = 0, last = [];
 function fit() {
   const h = document.querySelector(".top");
   if (h) document.documentElement.style.setProperty("--topH", h.offsetHeight + "px");
 }
 
 export async function mountTicker() {
-  const track = document.getElementById("tkTrack");
-  if (!track) return;
+  const box = document.getElementById("ticker"), track = document.getElementById("tkTrack");
+  if (!box || !track) return;
   fit();
   if (typeof ResizeObserver === "function") {
     if (ro) ro.disconnect();
@@ -43,14 +104,20 @@ export async function mountTicker() {
     const h = document.querySelector(".top");
     if (h) ro.observe(h);
   }
-  let live = [];
+  if (!rz) {   // turning the phone: the window is wider or narrower, so fill the track again
+    let to = 0;
+    window.addEventListener("resize", () => { clearTimeout(to); to = setTimeout(() => { const b = document.getElementById("ticker"), k = document.getElementById("tkTrack"); if (b && k && last.length) fill(b, k, last); }, 250); });
+    rz = 1;
+  }
+  let batch = [];
   try {
     const now = Date.now();
-    live = ((await getNotices()) || [])
+    batch = ((await getNotices()) || [])
       .filter((n) => n && n.to === "batch" && typeof n.t === "string" && n.t.trim() && now - (n.d || 0) < MAX_AGE)
       .slice(0, 5)
       .map((n) => n.t.trim().slice(0, 140));
-  } catch (e) { /* the fixed headlines stay */ }
+  } catch (e) { /* the admin's notices stay */ }
   if (!track.isConnected) return;   // the shell was drawn again meanwhile
-  fill(track, [...own(), ...live, welcome()]);
+  last = [...live(), ...batch];
+  fill(box, track, last);
 }
