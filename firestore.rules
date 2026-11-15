@@ -15,6 +15,7 @@ service cloud.firestore {
     function cadm() { return request.auth != null && (me().role == 'admin' || (me().role == 'teacher' && me().get('ca', false) == true && me().get('active', true) != false)); }
     function apd() { return me().get('ap', true) != false; }
     function myb() { return apd() ? me().get('bid', '') : ''; }
+    function myc() { return apd() ? me().get('cls', '') : ''; }
     function tch(b) { return request.auth != null && me().role == 'teacher' && me().get('ap', true) != false && me().get('active', true) != false && b in me().bids; }
     function tpub() { return me().get('pub', false) == true; }
     function fresh() { return !exists(/databases/$(d)/documents/config/init); }
@@ -46,7 +47,7 @@ service cloud.firestore {
       allow create: if request.auth != null && regOpen() && id.matches('[ST][0-9]{4}') && request.resource.data.keys().hasOnly(['n']) && request.resource.data.n is int && request.resource.data.n >= 1 && request.resource.data.n <= 100000;
       allow update: if request.auth != null && regOpen() && request.resource.data.keys().hasOnly(['n']) && request.resource.data.n is int && request.resource.data.n > resource.data.n && request.resource.data.n <= resource.data.n + 1000;
     }
-    match /ver/{v} { allow read: if v == 'v20261112'; }   // version stamp: the app reads ver/<this text>; allowed = these rules are the published ones (RULES_VER in lib-svc.js)
+    match /ver/{v} { allow read: if v == 'v20261115'; }   // version stamp: the app reads ver/<this text>; allowed = these rules are the published ones (RULES_VER in lib-svc.js)
     match /login/{id} {   // roll -> login email(s)
       allow read: if true;
       // the login address is roll@rise.local, or roll.xxxx@rise.local when that roll number belongs to an account that was deleted and is used again
@@ -140,6 +141,10 @@ service cloud.firestore {
       allow create: if tch(id) && request.resource.data.keys().hasOnly(['bid', 'done']);
       allow update: if tch(id) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['bid', 'done']);
     }
+    match /sp/{id} {   // a student's own study planner (tasks), focus log and daily AI counter: only he reads and writes it (the admin through the wildcard above)
+      allow read: if request.auth != null && sid() == id && apd();
+      allow create, update: if request.auth != null && sid() == id && apd() && me().role == 'student' && request.resource.data.keys().hasOnly(['tasks', 'log', 'hrs', 'ai', 't']) && request.resource.data.tasks is list && request.resource.data.tasks.size() <= 150 && request.resource.data.log is map && request.resource.data.log.size() <= 400 && request.resource.data.hrs is map && request.resource.data.ai is map;
+    }
     match /ms/{id} {   // student's own "I am confident" ticks
       allow read: if request.auth != null && sid() == id && apd();
       allow read: if tch(resource.data.bid);
@@ -155,10 +160,12 @@ service cloud.firestore {
       allow read: if tch(resource.data.bid);
       allow create: if tch(request.resource.data.bid);
     }
-    match /yr/{id} {   // yearly / monthly result sheet (poster)
-      allow get: if tch(id.split('_')[0]);
+    match /yr/{id} {   // yearly / monthly result sheet (poster): one per class (scope 'class', all its batches) or, the old ones, per batch
+      allow get: if tch(id.split('_')[0]) || cadm();
       allow read: if request.auth != null && resource.data.pub == true && resource.data.bid == myb();
-      allow create, update: if tch(request.resource.data.bid) && tpub();
+      allow read: if request.auth != null && resource.data.pub == true && resource.data.get('scope', '') == 'class' && resource.data.get('cls', '') == myc();
+      allow create, update: if tch(request.resource.data.bid) && tpub() && request.resource.data.get('scope', '') != 'class';   // a teacher makes only his own batch's (old style) sheet
+      allow create, update: if cadm() && request.resource.data.get('scope', '') == 'class';
     }
     match /users/{id}/reports/{r} {
       allow read: if request.auth != null && sid() == id && apd();

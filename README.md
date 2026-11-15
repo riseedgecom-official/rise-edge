@@ -78,17 +78,27 @@ Firebase → **Authentication → Settings → Authorized domains → Add domain
 | Syllabus | Class ৪–১২ এর সিলেবাস, ৯–১২ এ গ্রুপ অনুযায়ী; ক্লাসে কতটা শেষ; টপিক যোগ/বদল |
 | Month | নতুন মাস শুরু (আগের মাস Records এ জমা হয়, নতুন মাসে র‍্যাঙ্ক আবার শুরু) |
 | Report | মাসিক/বার্ষিক রিপোর্ট, মন্তব্য, ছাত্রদের জন্য প্রকাশ |
-| Result sheet | টপ ৩ ছাত্রের পোস্টার |
+| Result sheet | টপ ৩ ছাত্রের পোস্টার — ক্লাস অনুযায়ী (ক্লাসের সব গ্রুপ/ব্যাচ একসাথে); অ্যাডমিন/কো-অ্যাডমিন তৈরি ও প্রকাশ করেন |
 | Records | পুরনো মাসগুলো |
 | Fees *(শুধু অ্যাডমিন)* | ছাত্রদের ফি, পেমেন্ট যোগ, রসিদ, Add fee (মাস অনুযায়ী ফি প্রকাশ), ছাত্রের পেমেন্ট অনুরোধ অনুমোদন/বাতিল, শিক্ষকের বেতন |
 | Suggestions / Exam solutions | ব্যাচ অনুযায়ী ফাইল বা লিংক |
 | Alerts | নোটিশ, ব্যাচকে নোটিশ পাঠানো |
 | Requests | ছাত্রের অনুরোধ (টপিক রিভিউ, রিচেক, ছুটি, গ্রুপ বদল, স্কুল/কলেজ বদল) অনুমোদন |
 | ID card | ছাত্র/শিক্ষকের কার্ড, পুরো ব্যাচের কার্ড একসাথে প্রিন্ট |
+| News ticker *(অ্যাডমিন)* | উপরের চলমান নোটিশ বার: নোটিশ লিখে Publish, Hide/Show, Edit, Delete; গতি (Slow/Normal/Fast) ও বারের রং (Blue/Red/Green/Dark)। ছাত্র-শিক্ষক সবাই দেখে; ক্লাসে পাঠানো নোটিশও ৩০ দিন চলে। কোনো নোটিশ না থাকলে বারটাই দেখা যায় না |
 | Settings *(অ্যাডমিন)* | প্রতিষ্ঠানের নাম, ফোন, ঠিকানা; ইমেইল সেটআপ |
 
-**শিক্ষক:** Dashboard (নিজের বেতনের তথ্য সহ), Attendance, Routine, Homework, Exams, Guardian results, Syllabus, Month, Report, Result sheet, Records, Suggestions, Exam solutions, Alerts, Requests (শুধু টপিক রিভিউ ও রিচেক), ID card, Profile — শুধু নিজের ব্যাচের জন্য।
-**ছাত্র:** নিজের Dashboard, Attendance, Routine, Homework, Exams (ফল), Syllabus (নিজের “আমি পারি” টিক), Report, Result sheet, Fees (নিজের ফি, পেমেন্ট অনুরোধ, রসিদ), Suggestions, Exam solutions, Alerts, Requests, ID card, Profile।
+**শিক্ষক:** Dashboard (নিজের বেতনের তথ্য সহ), Attendance, Routine, Homework, Exams, Guardian results, Syllabus, Month, Report, Records, Suggestions, Exam solutions, Alerts, Requests (শুধু টপিক রিভিউ ও রিচেক), ID card, Profile — শুধু নিজের ব্যাচের জন্য। (Result sheet ক্লাসভিত্তিক, তাই অ্যাডমিন বানান।)
+**ছাত্র:** নিজের Dashboard, Study (পড়ার পরিকল্পনা, ফোকাস টাইমার, এআই সহকারী), Attendance, Routine, Homework, Exams (ফল), Syllabus (নিজের “আমি পারি” টিক), Report, Result sheet, Fees (নিজের ফি, পেমেন্ট অনুরোধ, রসিদ), Suggestions, Exam solutions, Alerts, Requests, ID card, Profile।
+
+### এআই পড়ার সহকারী (ঐচ্ছিক, ফ্রি)
+ছাত্রদের **Study** মেনুতে পড়ার প্ল্যানার, ফোকাস টাইমার ও চ্যাট সহকারী আছে। সহকারী নিজের ফল ও উপস্থিতি দেখে পরামর্শ দেয় — এর জন্য কোনো সেটআপ লাগে না। যেকোনো পড়ার প্রশ্নের উত্তর (Gemini) চাইলে একবার এটা করুন:
+1. Firebase Console → Project settings → Your apps → **Web** অ্যাপ (</>) যোগ করুন (না থাকলে) এবং তার **App ID** কপি করুন (`1:…:web:…`)। Android এর App ID চলবে না।
+2. Firebase Console → Build → **AI Logic** → Get started → *Gemini Developer API* (ফ্রি প্ল্যান আছে)।
+3. Google Cloud → **reCAPTCHA Enterprise** → আপনার সাইটের ডোমেইনের জন্য website key বানান। Firebase Console → **App Check** → Web অ্যাপে reCAPTCHA Enterprise ও ওই key দিন।
+4. Google Cloud → APIs & Services → Credentials → ব্রাউজার API key সীমাবদ্ধ হলে **Firebase AI Logic API** অনুমতি দিন।
+5. অ্যাপে Settings → *AI study assistant*: App ID ও site key বসান, AI chat **On** করে Save, তারপর **Test the AI** চাপুন।
+ফ্রি প্ল্যানে দৈনিক সীমা আছে; প্রতি ছাত্রের দৈনিক বার্তার সীমা Settings থেকে ঠিক করা যায়। এআই বন্ধ বা সীমা শেষ হলে বিল্ট-ইন সহকারী উত্তর দেয়। ছাত্রের নাম, ফোন বা ঠিকানা Google এ যায় না — শুধু ক্লাস, গ্রুপ ও সবচেয়ে কম নম্বরের বিষয়ের নাম যায়।
 
 ### ডিজিটাল আইডি কার্ড
 সাদা কার্ড, ওপরে গোল লোগো, নীল ফ্রেম ও সোনালি কোণ, বাঁ দিকে ছবি ও QR, ডান দিকে নাম / রোল / ক্লাস / ব্যাচ / অভিভাবকের নাম / অভিভাবকের ফোন। ছবি দেয় ছাত্র নিজে (Profile → Change photo)। প্রিন্ট বা PDF: কার্ড খুলে **Print / Save PDF**।

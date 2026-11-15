@@ -141,7 +141,7 @@ async function studentHome() {
     stat({ ic: "trophy", label: t("Exam rank"), value: r.er ? "#" + r.er : "–", sub: n ? t("of {n} students", { n }) : "", color: "#6a4cf0", ...nav("exams") }),
     stat({ ic: "star", label: t("Overall"), value: f1(r.ov), sub: r.or ? t("Rank #{r} of {n}", { r: r.or, n }) : "", color: "var(--blue)", ...nav("reports") }),
   ])}
-  ${sec("Quick actions", quick([["performance", "trend", "Performance"], ["exams", "clip", "Results"], ["syllabus", "list", "Syllabus"], ["reports", "chart", "Report"], ["requests", "mega", "Requests"], ["idcard", "idcard", "ID card"]]))}
+  ${sec("Quick actions", quick([["study", "spark", "Study"], ["aichat", "bot", "AI assistant"], ["performance", "trend", "Performance"], ["exams", "clip", "Results"], ["syllabus", "list", "Syllabus"], ["reports", "chart", "Report"], ["requests", "mega", "Requests"], ["idcard", "idcard", "ID card"]]))}
   ${rr ? `<div class="mt">${rr}</div>` : ""}${pf ? `<div class="mt">${pf}</div>` : ""}${cls ? `<div class="mt">${cls}</div>` : ""}${fee ? `<div class="mt">${fee}</div>` : ""}${nts ? `<div class="mt">${nts}</div>` : ""}`;
 }
 

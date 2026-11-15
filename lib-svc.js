@@ -154,7 +154,7 @@ const inTime = (p, what) => {
 const isDenied = (e) => e && (e.code === "permission-denied" || /permission/i.test(String(e.message || "")));
 // Are the rules in Firebase the ones of this app? firestore.rules lets anybody read ver/<RULES_VER> and nothing else of that name, so the
 // read is refused only when the published rules are older (or not published at all). true / false / null (cannot tell: no internet)
-export const RULES_VER = "v20261112";
+export const RULES_VER = "v20261115";
 export async function rulesCurrent() {
   try { await db.get("ver/" + RULES_VER); return true; } catch (e) { return isDenied(e) ? false : null; }
 }
@@ -356,6 +356,7 @@ async function purgeUserData(u) {
   await step(async () => { const R = await db.list("pr", ["sid", "==", id]); if (R.length) await db.batch([...R.map((x) => ({ del: "pi/" + x.id })), ...R.map((x) => ({ del: "pr/" + x.id }))]); });
   for (const [col, f] of [["pay", "sid"], ["sf", "sid"], ["rq", "sid"], ["pf", "sid"], ["nt", "to"], ["sal", "tid"]]) await wipe(col, f, id);
   await step(() => db.del("ms/" + id));
+  await step(() => db.del("sp/" + id));   // his study planner / focus log
   if (roll) { await wipe("fp", "roll", roll); await wipe("reg", "roll", roll); }
   // marks, attendance and so on inside the documents of the class
   if (bid) {
@@ -378,8 +379,9 @@ async function purgeUserData(u) {
     await step(async () => {
       for (const r of await db.list("rep", ["bid", "==", bid])) if (r.c && id in r.c) { const c = { ...r.c }; delete c[id]; await db.upd("rep/" + r.id, { c }); }
     });
-    await step(async () => {   // the monthly top students poster
-      for (const y of await db.list("yr", ["bid", "==", bid])) { const top = (y.top || []).filter((x) => x.id !== id); if (top.length !== (y.top || []).length) await db.upd("yr/" + y.id, { top }); }
+    await step(async () => {   // the top students posters: of his batch (old) and of his class (class-wise sheets); the entries carry the student's id
+      const Ys = [...await db.list("yr", ["bid", "==", bid]), ...(u.cls ? await db.list("yr", ["scope", "==", "class"], ["cls", "==", u.cls]) : [])];
+      for (const y of Ys) { const top = (y.top || []).filter((x) => x.id !== id); if (top.length !== (y.top || []).length) await db.upd("yr/" + y.id, { top }); }
     });
     await step(async () => {
       const b = await db.get("bstat/" + bid);

@@ -1,6 +1,6 @@
 // Rise Edge Academy - keeps the app files so it can be installed and open fast.
 // Network first: a new version is always picked up when online; the saved copy is used offline.
-const C = "rise-v3", SHARE = "rise-share";
+const C = "rise-v4", SHARE = "rise-share";
 const FILES = ["./", "index.html", "portal.html", "app.css", "theme.css", "app.js", "ticker.js", "config.js", "logo.jpg", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(C).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()).catch(() => self.skipWaiting()));

@@ -2,10 +2,12 @@
 import { db } from "./lib-db.js";
 import { changePassword, dbError } from "./lib-db.js";
 import {
-  S, esc, t, page, act, onChange, onSubmit, formData, pageState, refresh, isStaff, isAdmin, isTeacher, isStudent, instName, addBN, batchOf, activeStudents, isEmail, cmp,
+  S, esc, t, page, act, onChange, onSubmit, formData, pageState, refresh, isStaff, isAdmin, isTeacher, isStudent, instName, addBN, batchOf, activeStudents, isEmail, cmp, ago,
 } from "./lib-core.js";
-import { icon, avatar, tag, empty, notice, card, row, btn, chips, input, textarea, select, batchPicker, form, toast, showDoc, ask } from "./lib-ui.js";
+import { icon, avatar, tag, empty, notice, card, row, btn, chips, input, textarea, select, batchPicker, form, toast, showDoc, ask, info } from "./lib-ui.js";
+import { aiConfig, dropAiConfig, testAI, DEFAULT_MODEL, DEFAULT_LIMIT } from "./lib-ai.js";
 import { reloadMe, saveInst, squarePhoto, mailCfg, sendMail, adminIdPlan, claimAdminId } from "./lib-svc.js";
+import { noticeList, SPEEDS, THEMES, MAX_NOTICES, MAX_TEXT } from "./ticker.js";
 import { qrSvg, qrMatrix } from "./lib-qr.js";
 import { fitLink } from "./lib-idq.js";
 import { ADMIN_ID } from "./lib-stats.js";
@@ -195,9 +197,71 @@ act("pf-pw", async () => {
   });
 });
 
+// ================= news ticker (admin) =================
+// config/inst.ticker [{id, t, on, c}], tkSpeed, tkTheme  - the bar itself is drawn by ticker.js
+const tkUid = () => "n" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+const SPEED_L = { slow: "Slow", normal: "Normal", fast: "Fast" }, THEME_L = { blue: "Blue", red: "Red", green: "Green", dark: "Dark" };
+const THEME_C = { blue: "#4338ca", red: "#be123c", green: "#047857", dark: "#0f172a" };
+const saveTicker = async (patch) => {
+  await saveInst(patch);
+  window.dispatchEvent(new Event("rise-me"));   // redraws the shell, so the bar at the top changes at once
+};
+page("ticker", async () => {
+  const I = S.INST, L = noticeList(I), st = pageState("tk"), ed = st.edit ? L.find((x) => x.id === st.edit) : null;
+  const sp = SPEEDS[I.tkSpeed] ? I.tkSpeed : "normal", th = THEMES.includes(I.tkTheme) ? I.tkTheme : "blue", liveN = L.filter((x) => x.on).length;
+  const item = (x) => `<div class="card tk-row ${x.on ? "" : "tk-off"}" style="${x.on ? "" : "opacity:.72"}">
+    <div class="row" style="gap:8px;flex-wrap:wrap">${tag(x.on ? t("Live") : t("Hidden"), x.on ? "ok" : "gold")}${x.c ? `<span class="mut sm">${esc(ago(x.c))}</span>` : ""}</div>
+    <p style="margin:8px 0 10px;overflow-wrap:anywhere"><b>${esc(x.t)}</b></p>
+    <div class="row" style="gap:8px;flex-wrap:wrap;justify-content:flex-end">
+      ${btn(x.on ? t("Hide") : t("Show"), "tk-toggle", { arg: x.id, sm: true, ic: x.on ? "eyeoff" : "eye" })}
+      ${btn(t("Edit"), "tk-edit", { arg: x.id, sm: true, ic: "edit" })}
+      ${btn(t("Delete"), "tk-del", { arg: x.id, sm: true, kind: "bad", ic: "trash" })}</div></div>`;
+  return `<form class="card stack-s" data-submit="tk-save"><h3>${esc(ed ? t("Edit notice") : t("New notice"))}</h3>
+    ${textarea("t", { label: t("Notice text"), rows: 3, value: ed ? ed.t : "", placeholder: t("Example: Class 10 exam starts on 20 November.") })}
+    <small class="mut">${esc(t("Up to {n} characters. It scrolls at the top of every screen, for everybody.", { n: MAX_TEXT }))}</small>
+    <label class="check"><span>${esc(t("Show on the ticker (Live)"))}</span><input type="checkbox" name="on" ${!ed || ed.on ? "checked" : ""}></label>
+    <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn btn--pri" type="submit">${icon(ed ? "check" : "send")}${esc(ed ? t("Update") : t("Publish"))}</button>${ed ? btn(t("Cancel"), "tk-cancel") : ""}</div></form>
+  <section class="card mt stack-s"><h3>${esc(t("Look of the ticker"))}</h3>
+    <div class="fld"><span>${esc(t("Scroll speed"))}</span>${chips(Object.keys(SPEEDS).map((k) => ({ k, label: t(SPEED_L[k]) })), sp, "tk-speed")}</div>
+    <div class="fld"><span>${esc(t("Bar colour"))}</span><div class="chips" role="tablist">${THEMES.map((k) => `<button type="button" class="chip ${k === th ? "on" : ""}" data-act="tk-theme" data-arg="${k}" role="tab" aria-selected="${k === th}"><i style="display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;background:${THEME_C[k]}"></i>${esc(t(THEME_L[k]))}</button>`).join("")}</div></div>
+    <small class="mut">${esc(t("The ticker at the top of this screen shows the change at once."))}</small></section>
+  <div class="mt">${card(t("Published notices"), L.length ? `<div class="stack-s">${L.map(item).join("")}</div>` : empty(t("No notices yet. Write one above and press Publish."), "inbox"), { right: tag(t("{n} notices, {m} live", { n: L.length, m: liveN }), "info") })}</div>
+  <p class="mut sm mt">${esc(t("Notices sent to a class also run here for that class's students, for 30 days."))}</p>`;
+}, { title: "News ticker" });
+onSubmit("tk-save", async (b) => {
+  const f = formData(b.closest("form")), text = String(f.t || "").trim().replace(/\s+/g, " ").slice(0, MAX_TEXT), st = pageState("tk");
+  if (!text) return toast(t("Write the notice first."), "bad");
+  const L = noticeList();
+  if (st.edit && L.some((x) => x.id === st.edit)) {
+    await saveTicker({ ticker: L.map((x) => (x.id === st.edit ? { ...x, t: text, on: !!f.on } : x)) });
+    toast(t("Notice updated."), "ok");
+  } else {
+    if (L.length >= MAX_NOTICES) return toast(t("There are {n} notices already. Delete an old one first.", { n: MAX_NOTICES }), "bad");
+    await saveTicker({ ticker: [{ id: tkUid(), t: text, on: !!f.on, c: Date.now() }, ...L] });
+    toast(t("Notice published."), "ok");
+  }
+  st.edit = null; refresh();
+});
+act("tk-edit", (el) => { pageState("tk").edit = el.dataset.arg; refresh(); window.scrollTo({ top: 0, behavior: "smooth" }); });
+act("tk-cancel", () => { pageState("tk").edit = null; refresh(); });
+act("tk-toggle", async (el) => {
+  const L = noticeList(), x = L.find((n) => n.id === el.dataset.arg); if (!x) return;
+  await saveTicker({ ticker: L.map((n) => (n.id === x.id ? { ...n, on: !n.on } : n)) });
+  toast(x.on ? t("Hidden from the ticker.") : t("Live on the ticker."), "ok"); refresh();
+});
+act("tk-del", async (el) => {
+  const L = noticeList(), x = L.find((n) => n.id === el.dataset.arg); if (!x) return;
+  if (!(await ask(t("It will be removed from the ticker for good."), { title: t("Delete this notice?"), ok: t("Yes, delete"), danger: true }))) return;
+  await saveTicker({ ticker: L.filter((n) => n.id !== x.id) });
+  const st = pageState("tk"); if (st.edit === x.id) st.edit = null;
+  toast(t("Notice deleted."), "ok"); refresh();
+});
+act("tk-speed", async (el) => { if (!SPEEDS[el.dataset.arg]) return; await saveTicker({ tkSpeed: el.dataset.arg }); toast(t("Speed changed."), "ok"); refresh(); });
+act("tk-theme", async (el) => { if (!THEMES.includes(el.dataset.arg)) return; await saveTicker({ tkTheme: el.dataset.arg }); toast(t("Colour changed."), "ok"); refresh(); });
+
 // ================= settings (admin) =================
 page("settings", async () => {
-  const m = await mailCfg(), I = S.INST;
+  const m = await mailCfg(), I = S.INST, A = await aiConfig(true);
   return `<form class="card stack-s" data-submit="st-inst"><h3>${esc(t("Institute"))}</h3>
     ${input("name", { label: t("Institute name"), value: I.name || "Rise Edge Academy", maxlength: "80" })}
     ${input("tag", { label: t("Tagline (shown on the ID card)"), value: I.tag || "", maxlength: "80" })}
@@ -205,9 +269,22 @@ page("settings", async () => {
     ${input("phone", { label: t("Phone"), value: I.phone || "", type: "tel" })}
     ${input("addr", { label: t("Address"), value: I.addr || "", maxlength: "200" })}
     <button class="btn btn--pri" type="submit">${icon("check")}${esc(t("Save"))}</button></form>
-  <form class="card stack-s mt" data-submit="st-ticker"><h3>${esc(t("News ticker"))}</h3>
-    ${textarea("ticker", { label: t("Headlines"), rows: 6, value: (Array.isArray(I.ticker) ? I.ticker : []).join("\n"), placeholder: t("Example: Admission open for the new batch"), hint: t("One headline per line, up to 12. They run under the top bar for everybody, together with the latest batch notices.") })}
-    <button class="btn btn--pri" type="submit">${icon("check")}${esc(t("Save"))}</button></form>
+  <form class="card stack-s mt" data-submit="st-ai"><h3>${esc(t("AI study assistant"))}</h3>
+    <p class="mut sm">${esc(t("Students always have the built-in study helper (plan, weak subjects, attendance, tips). Turn the AI on to let them ask any study question. It uses Google Gemini through Firebase AI Logic; the free plan has daily limits."))}</p>
+    ${select("on", [["0", t("Off")], ["1", t("On")]], A.on ? "1" : "0", { label: t("AI chat") })}
+    ${input("appId", { label: t("Web app ID"), value: A.appId, placeholder: "1:1234567890:web:abcdef", hint: t("The App ID of the Web app of this Firebase project (not the Android one).") })}
+    ${input("key", { label: t("reCAPTCHA Enterprise site key"), value: A.key })}
+    ${input("model", { label: t("Model"), value: A.model, hint: t("Leave it as it is unless Google renames the model.") })}
+    ${input("lim", { label: t("Messages per student per day"), type: "number", value: A.lim, min: "1", max: "200" })}
+    <div class="row"><button class="btn btn--pri" type="submit">${icon("check")}${esc(t("Save"))}</button>${btn(t("Test the AI"), "st-ai-test", { ic: "spark" })}</div>
+    <details><summary><b>${esc(t("How to set it up (once)"))}</b></summary>
+      <ol class="sm">
+        <li>${esc(t("Firebase Console > Project settings > Your apps: add a Web app (</>) if there is none, and copy its App ID."))}</li>
+        <li>${esc(t("Firebase Console > Build > AI Logic > Get started: choose the Gemini Developer API (it has a free plan)."))}</li>
+        <li>${esc(t("Google Cloud > reCAPTCHA Enterprise: make a website key for your site's domain. In Firebase Console > App Check > Apps, register the Web app with reCAPTCHA Enterprise and that key."))}</li>
+        <li>${esc(t("Google Cloud > APIs & Services > Credentials: open your browser API key and, if it is restricted, allow the Firebase AI Logic API."))}</li>
+        <li>${esc(t("Paste the App ID and the site key here, set AI chat to On, press Save, then Test the AI."))}</li>
+      </ol></details></form>
   <form class="card stack-s mt" data-submit="st-mail"><h3>${esc(t("Email (EmailJS)"))}</h3>
     <p class="mut sm">${esc(t("Optional and free. It sends absent alerts and results to guardians' emails. See the README for the 5-minute setup."))}</p>
     ${input("pk", { label: t("Public key"), value: m.pk || "" })}${input("sid", { label: t("Service ID"), value: m.sid || "" })}${input("t2", { label: t("Template ID"), value: m.t2 || "", hint: t("The template uses {{to_email}}, {{to_name}}, {{subject}}, {{message}}.") })}
@@ -220,12 +297,22 @@ onSubmit("st-inst", async (b) => {
   window.dispatchEvent(new Event("rise-me"));
   toast(t("Saved"), "ok");
 });
-onSubmit("st-ticker", async (b) => {
-  const f = formData(b.closest("form"));
-  const list = String(f.ticker || "").split("\n").map((x) => x.trim()).filter(Boolean).slice(0, 12).map((x) => x.slice(0, 140));
-  await saveInst({ ticker: list });
-  window.dispatchEvent(new Event("rise-me"));
+const aiForm = (b) => { const f = formData(b.closest("form")); return { on: f.on === "1", appId: String(f.appId || "").trim(), key: String(f.key || "").trim(), model: String(f.model || "").trim() || DEFAULT_MODEL, lim: Math.max(1, Math.min(200, Math.round(+f.lim) || DEFAULT_LIMIT)) }; };
+onSubmit("st-ai", async (b) => {
+  const c = aiForm(b);
+  if (c.on && (!c.appId || !c.key)) return toast(t("Fill in the Web app ID and the site key before turning the AI on."), "bad");
+  if (c.appId && !/^\d+:\d+:web:[0-9a-f]+$/i.test(c.appId)) return toast(t("The Web app ID looks like 1:1234567890:web:abcdef. An Android ID cannot be used."), "bad");
+  await db.set("config/ai", c);
+  dropAiConfig();
   toast(t("Saved"), "ok");
+});
+act("st-ai-test", async (b) => {
+  const c = aiForm(b);
+  if (!c.appId || !c.key) return toast(t("Fill in the Web app ID and the site key before turning the AI on."), "bad");
+  toast(t("Testing... this can take a few seconds."));
+  const r = await testAI(c);
+  const why = { quota: t("The daily limit is reached or Google says too many requests."), setup: t("Setup problem: check the Web app ID, the site key, App Check and the API key (see the steps above)."), net: t("The AI could not be reached (internet?)."), blocked: t("The AI refused to answer."), other: t("Something else went wrong.") };
+  await info(r.ok ? t("It works. The AI answered: {x}", { x: r.text.slice(0, 80) }) : (why[r.problem] || why.other) + "\n\n" + r.detail, r.ok ? t("AI test passed") : t("AI test failed"));
 });
 onSubmit("st-mail", async (b) => {
   const f = formData(b.closest("form"));
@@ -252,7 +339,9 @@ addBN({
   "Login ID": "লগইন আইডি", "Role": "ভূমিকা", "School / college": "স্কুল / কলেজ", "Subject": "বিষয়", "Email": "ইমেইল", "Waiting for admin approval": "অ্যাডমিনের অনুমোদনের অপেক্ষায়", "Your account is created. The admin or a co-admin must approve it before you can open the other pages.": "আপনার অ্যাকাউন্ট তৈরি হয়েছে। অন্য পেজ খোলার আগে অ্যাডমিন বা কো-অ্যাডমিনকে অনুমোদন দিতে হবে।",
   "Change photo": "ছবি বদলান", "My information": "আমার তথ্য", "Address": "ঠিকানা", "Guardian's phone": "অভিভাবকের ফোন", "Guardian's email": "অভিভাবকের ইমেইল", "Edit": "সম্পাদনা", "Account": "অ্যাকাউন্ট", "Change password": "পাসওয়ার্ড বদলান", "Logout": "লগআউট", "Saved": "সংরক্ষিত", "Name": "নাম",
   "Enter your full name.": "পুরো নাম দিন।", "Enter a valid phone number (01XXXXXXXXX).": "সঠিক ফোন নম্বর দিন (01XXXXXXXXX)।", "Enter a valid guardian phone number (01XXXXXXXXX).": "অভিভাবকের সঠিক ফোন নম্বর দিন (01XXXXXXXXX)।", "The guardian email looks wrong.": "অভিভাবকের ইমেইলটি ঠিক মনে হচ্ছে না।",
-  "Current password": "বর্তমান পাসওয়ার্ড", "Institute": "প্রতিষ্ঠান", "News ticker": "সংবাদ টিকার", "Headlines": "শিরোনাম", "Example: Admission open for the new batch": "যেমন: নতুন ব্যাচে ভর্তি চলছে", "One headline per line, up to 12. They run under the top bar for everybody, together with the latest batch notices.": "প্রতি লাইনে একটি শিরোনাম, সর্বোচ্চ ১২টি। সবার টপ বারের নিচে চলবে, সাথে ব্যাচের সর্বশেষ নোটিশ।", "News": "খবর", "Welcome to {n}": "{n} এ স্বাগতম", "Institute name": "প্রতিষ্ঠানের নাম", "Tagline (shown on the ID card)": "ট্যাগলাইন (আইডি কার্ডে দেখাবে)", "Owner / principal name": "মালিক / অধ্যক্ষের নাম", "Email (EmailJS)": "ইমেইল (EmailJS)",
+  "Notice": "নোটিশ", "Hover to pause": "হোভার করলে থামবে", "Live": "চালু", "Hidden": "লুকানো", "Hide": "লুকাও", "Edit notice": "নোটিশ সম্পাদনা", "New notice": "নতুন নোটিশ", "Notice text": "নোটিশের লেখা", "Example: Class 10 exam starts on 20 November.": "যেমন: দশম শ্রেণির পরীক্ষা ২০ নভেম্বর থেকে শুরু।", "Up to {n} characters. It scrolls at the top of every screen, for everybody.": "সর্বোচ্চ {n} অক্ষর। এটি সবার স্ক্রিনের উপরে চলতে থাকবে।", "Show on the ticker (Live)": "টিকারে দেখাও (চালু)", "Update": "আপডেট", "Look of the ticker": "টিকারের চেহারা", "Scroll speed": "চলার গতি", "Slow": "ধীর", "Normal": "স্বাভাবিক", "Fast": "দ্রুত", "Bar colour": "বারের রং", "Blue": "নীল", "Red": "লাল", "Green": "সবুজ", "Dark": "ডার্ক", "The ticker at the top of this screen shows the change at once.": "এই স্ক্রিনের উপরের টিকারে পরিবর্তন সাথে সাথেই দেখা যাবে।", "Published notices": "প্রকাশিত নোটিশ", "No notices yet. Write one above and press Publish.": "এখনো কোনো নোটিশ নেই। উপরে লিখে প্রকাশ করো।", "{n} notices, {m} live": "{n}টি নোটিশ, {m}টি চালু", "Notices sent to a class also run here for that class's students, for 30 days.": "ক্লাসে পাঠানো নোটিশও সেই ক্লাসের শিক্ষার্থীদের জন্য ৩০ দিন এখানে চলে।", "Write the notice first.": "আগে নোটিশটি লেখো।", "Notice updated.": "নোটিশ আপডেট হয়েছে।", "There are {n} notices already. Delete an old one first.": "ইতিমধ্যে {n}টি নোটিশ আছে। আগে একটি পুরনো নোটিশ মুছে ফেলো।", "Notice published.": "নোটিশ প্রকাশিত হয়েছে।", "Hidden from the ticker.": "টিকার থেকে লুকানো হয়েছে।", "Live on the ticker.": "টিকারে চালু হয়েছে।", "It will be removed from the ticker for good.": "এটি টিকার থেকে স্থায়ীভাবে মুছে যাবে।", "Delete this notice?": "নোটিশটি মুছবে?", "Yes, delete": "হ্যাঁ, মুছো", "Notice deleted.": "নোটিশ মুছে ফেলা হয়েছে।", "Speed changed.": "গতি বদলানো হয়েছে।", "Colour changed.": "রং বদলানো হয়েছে।",
+  "Current password": "বর্তমান পাসওয়ার্ড", "Institute": "প্রতিষ্ঠান", "News ticker": "সংবাদ টিকার", "AI study assistant": "এআই পড়ার সহকারী", "Students always have the built-in study helper (plan, weak subjects, attendance, tips). Turn the AI on to let them ask any study question. It uses Google Gemini through Firebase AI Logic; the free plan has daily limits.": "শিক্ষার্থীরা সবসময় বিল্ট-ইন পড়ার সহকারী পায় (পরিকল্পনা, দুর্বল বিষয়, উপস্থিতি, টিপস)। এআই চালু করলে তারা পড়াশোনার যেকোনো প্রশ্ন করতে পারবে। এটি Firebase AI Logic এর মাধ্যমে Google Gemini ব্যবহার করে; ফ্রি প্ল্যানে দৈনিক সীমা আছে।", "Off": "বন্ধ", "On": "চালু", "AI chat": "এআই চ্যাট", "Web app ID": "ওয়েব অ্যাপ আইডি", "The App ID of the Web app of this Firebase project (not the Android one).": "এই Firebase প্রজেক্টের Web অ্যাপের App ID (Android এরটা নয়)।", "reCAPTCHA Enterprise site key": "reCAPTCHA Enterprise সাইট কী", "Model": "মডেল", "Leave it as it is unless Google renames the model.": "Google মডেলের নাম না বদলালে যেমন আছে তেমন রাখুন।", "Messages per student per day": "প্রতি শিক্ষার্থীর দৈনিক বার্তা", "Test the AI": "এআই পরীক্ষা করুন", "How to set it up (once)": "কীভাবে চালু করবেন (একবারই)",
+  "Firebase Console > Project settings > Your apps: add a Web app (</>) if there is none, and copy its App ID.": "Firebase Console > Project settings > Your apps: Web অ্যাপ (</>) না থাকলে যোগ করুন, আর তার App ID কপি করুন।", "Firebase Console > Build > AI Logic > Get started: choose the Gemini Developer API (it has a free plan).": "Firebase Console > Build > AI Logic > Get started: Gemini Developer API বাছাই করুন (এতে ফ্রি প্ল্যান আছে)।", "Google Cloud > reCAPTCHA Enterprise: make a website key for your site's domain. In Firebase Console > App Check > Apps, register the Web app with reCAPTCHA Enterprise and that key.": "Google Cloud > reCAPTCHA Enterprise: আপনার সাইটের ডোমেইনের জন্য একটি ওয়েবসাইট কী বানান। Firebase Console > App Check > Apps এ Web অ্যাপটি reCAPTCHA Enterprise আর ওই কী দিয়ে রেজিস্টার করুন।", "Google Cloud > APIs & Services > Credentials: open your browser API key and, if it is restricted, allow the Firebase AI Logic API.": "Google Cloud > APIs & Services > Credentials: ব্রাউজার API কী খুলুন, আর সীমাবদ্ধ থাকলে Firebase AI Logic API অনুমতি দিন।", "Paste the App ID and the site key here, set AI chat to On, press Save, then Test the AI.": "App ID আর সাইট কী এখানে বসান, এআই চ্যাট চালু করুন, সংরক্ষণ চাপুন, তারপর এআই পরীক্ষা করুন।", "Fill in the Web app ID and the site key before turning the AI on.": "এআই চালু করার আগে Web অ্যাপ আইডি আর সাইট কী পূরণ করুন।", "The Web app ID looks like 1:1234567890:web:abcdef. An Android ID cannot be used.": "Web অ্যাপ আইডি দেখতে 1:1234567890:web:abcdef এর মতো। Android আইডি চলবে না।", "Testing... this can take a few seconds.": "পরীক্ষা চলছে... কয়েক সেকেন্ড লাগতে পারে।", "The daily limit is reached or Google says too many requests.": "দৈনিক সীমা শেষ, অথবা Google বলছে অনেক বেশি অনুরোধ।", "Setup problem: check the Web app ID, the site key, App Check and the API key (see the steps above).": "সেটআপে সমস্যা: Web অ্যাপ আইডি, সাইট কী, App Check আর API কী দেখুন (ওপরের ধাপগুলো দেখুন)।", "The AI could not be reached (internet?).": "এআই এর সাথে যোগাযোগ করা যায়নি (ইন্টারনেট?)।", "The AI refused to answer.": "এআই উত্তর দিতে রাজি হয়নি।", "Something else went wrong.": "অন্য কোনো সমস্যা হয়েছে।", "It works. The AI answered: {x}": "কাজ করছে। এআই উত্তর দিয়েছে: {x}", "AI test passed": "এআই পরীক্ষা সফল", "AI test failed": "এআই পরীক্ষা ব্যর্থ", "News": "খবর", "Welcome to {n}": "{n} এ স্বাগতম", "Institute name": "প্রতিষ্ঠানের নাম", "Tagline (shown on the ID card)": "ট্যাগলাইন (আইডি কার্ডে দেখাবে)", "Owner / principal name": "মালিক / অধ্যক্ষের নাম", "Email (EmailJS)": "ইমেইল (EmailJS)",
   "Optional and free. It sends absent alerts and results to guardians' emails. See the README for the 5-minute setup.": "ঐচ্ছিক ও বিনামূল্যে। অভিভাবকের ইমেইলে অনুপস্থিতির বার্তা ও ফল পাঠায়। ৫ মিনিটের সেটআপ README তে আছে।", "Public key": "পাবলিক কি", "Service ID": "সার্ভিস আইডি", "Template ID": "টেমপ্লেট আইডি",
   "The template uses {{to_email}}, {{to_name}}, {{subject}}, {{message}}.": "টেমপ্লেটে {{to_email}}, {{to_name}}, {{subject}}, {{message}} ব্যবহার করুন।", "Send test email": "টেস্ট ইমেইল পাঠান", "Enter the institute name": "প্রতিষ্ঠানের নাম দিন", "Your profile has no email address.": "আপনার প্রোফাইলে ইমেইল ঠিকানা নেই।",
   "Test email": "টেস্ট ইমেইল", "This is a test email from {n}.": "এটি {n} থেকে একটি টেস্ট ইমেইল।", "Email sent": "ইমেইল পাঠানো হয়েছে", "Student": "ছাত্র", "Teacher": "শিক্ষক", "Admin": "অ্যাডমিন", "Co-admin": "কো-অ্যাডমিন", "Save": "সংরক্ষণ",

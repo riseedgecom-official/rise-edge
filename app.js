@@ -35,11 +35,16 @@ const NAV = [
   { k: "resultsheet", ic: "trophy", l: "Result sheet", r: "acts", g: "Results" },
   { k: "records", ic: "doc", l: "Records", r: "act", g: "Results" },
   { k: "fees", ic: "wallet", l: "Fees", r: "as", tab: 1, g: "Money" },
+  { k: "study", ic: "spark", l: "Study", r: "s", g: "Study" },
+  { k: "planner", ic: "calcheck", l: "Study planner", r: "s", g: "Study" },
+  { k: "focus", ic: "timer", l: "Focus timer", r: "s", g: "Study" },
+  { k: "aichat", ic: "bot", l: "AI assistant", r: "s", g: "Study" },
   { k: "suggestions", ic: "file", l: "Suggestions", r: "acts", g: "Library" },
   { k: "solutions", ic: "doc", l: "Exam solutions", r: "acts", g: "Library" },
   { k: "alerts", ic: "bell", l: "Alerts", r: "acts", g: "Account", badge: "bell" },
   { k: "requests", ic: "mega", l: "Requests", r: "acts", g: "Account" },
   { k: "idcard", ic: "idcard", l: "ID card", r: "acts", g: "Account" },
+  { k: "ticker", ic: "mega", l: "News ticker", r: "a", g: "Account" },
   { k: "coadmin", ic: "shield", l: "Co-admin panel", r: "a", g: "Account" },
   { k: "transfer", ic: "key", l: "Admin transfer", r: "a", g: "Account" },
   { k: "settings", ic: "cog", l: "Settings", r: "a", g: "Account" },
@@ -237,7 +242,7 @@ async function boot() {
   if (!configured) { window.__riseReady = true; return renderNotConfigured(); }
   // page modules: one broken file must not stop the others
   S.moduleErrors = [];
-  const mods = ["pages-home.js", "pages-people.js", "pages-account.js", "pages-attendance.js", "pages-exams.js", "pages-results.js", "pages-fees.js", "pages-content.js", "pages-marks.js", "pages-transfer.js", "pages-perf.js"];
+  const mods = ["pages-home.js", "pages-people.js", "pages-account.js", "pages-attendance.js", "pages-exams.js", "pages-results.js", "pages-fees.js", "pages-content.js", "pages-marks.js", "pages-transfer.js", "pages-perf.js", "pages-study.js"];
   // one after the other, in a fixed order, so the texts of the modules are always added in the same order (the files are preloaded in index.html)
   for (const m of mods) await import("./" + m).catch((e) => { console.error(m, e); S.moduleErrors.push(m + ": " + (e && e.message)); });
   onAuth((u) => { start(u).catch((e) => { console.error(e); S.loginMsg = dbError(e); signOutNow().catch(() => {}); }); });
