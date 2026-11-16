@@ -454,6 +454,7 @@ act("bat-del", async (el) => {
   if (!(await ask(t("Delete batch {n}?", { n: b.name }), { danger: true, ok: t("Delete") }))) return;
   await db.del("batches/" + b.id);
   await db.del("bstat/" + b.id).catch(() => {});
+  for (const col of ["ps", "pt"]) { try { const L = await db.list(col, ["bid", "==", b.id]); if (L.length) await db.batch(L.map((x) => ({ del: col + "/" + x.id }))); } catch (e) { /* none, or not allowed */ } }   // its practice sets and tries
   logAct("Deleted batch " + b.name);
   closeModals();
   await reloadPeople();

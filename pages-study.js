@@ -148,7 +148,7 @@ page("study", async () => {
   <section class="card sp-tip mt">${icon("spark")}<div><b>${esc(t("Study tip"))}</b><p>${esc(tip.text)}</p>
     <div class="sp-btns">${btn(t(GO[tip.go] || "Open planner"), "nav", { arg: tip.go || "planner", sm: true })}${btn(t("Ask the assistant"), "nav", { arg: "aichat", sm: true, kind: "pri" })}</div></div></section>
   <div class="sec-t">${esc(t("Quick actions"))}</div>
-  <div class="tiles">${[["aichat", "bot", "AI assistant"], ["focus", "timer", "Focus timer"], ["planner", "calcheck", "Study planner"], ["syllabus", "list", "Syllabus"]].map(([pg, ic, l]) => `<button class="stat" data-act="nav" data-arg="${pg}"><span class="stat-top">${icon(ic)}${esc(t(l))}</span></button>`).join("")}</div>
+  <div class="tiles">${[["aichat", "bot", "AI assistant"], ["focus", "timer", "Focus timer"], ["planner", "calcheck", "Study planner"], ["practice", "clip", "Practice"]].map(([pg, ic, l]) => `<button class="stat" data-act="nav" data-arg="${pg}"><span class="stat-top">${icon(ic)}${esc(t(l))}</span></button>`).join("")}</div>
   <div class="mt">${card(t("Today's plan"), L.length ? `<div class="list">${L.map((x) => taskRow(x)).join("")}</div>` : `<p class="mut">${esc(t("No tasks for today."))}</p>${btn(t("Make my study plan"), "st-plan", { sm: true, kind: "pri" })}`, { right: btn(t("Open"), "nav", { arg: "planner", xs: true }) })}</div>
   ${classes ? `<div class="mt">${classes}</div>` : ""}`;
 });

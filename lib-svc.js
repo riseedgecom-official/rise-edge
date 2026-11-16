@@ -154,7 +154,7 @@ const inTime = (p, what) => {
 const isDenied = (e) => e && (e.code === "permission-denied" || /permission/i.test(String(e.message || "")));
 // Are the rules in Firebase the ones of this app? firestore.rules lets anybody read ver/<RULES_VER> and nothing else of that name, so the
 // read is refused only when the published rules are older (or not published at all). true / false / null (cannot tell: no internet)
-export const RULES_VER = "v20261115";
+export const RULES_VER = "v20261116";
 export async function rulesCurrent() {
   try { await db.get("ver/" + RULES_VER); return true; } catch (e) { return isDenied(e) ? false : null; }
 }
@@ -357,6 +357,7 @@ async function purgeUserData(u) {
   for (const [col, f] of [["pay", "sid"], ["sf", "sid"], ["rq", "sid"], ["pf", "sid"], ["nt", "to"], ["sal", "tid"]]) await wipe(col, f, id);
   await step(() => db.del("ms/" + id));
   await step(() => db.del("sp/" + id));   // his study planner / focus log
+  await wipe("pt", "sid", id);            // his tries of the practice sets
   if (roll) { await wipe("fp", "roll", roll); await wipe("reg", "roll", roll); }
   // marks, attendance and so on inside the documents of the class
   if (bid) {

@@ -29,6 +29,8 @@ const NAV = [
   { k: "exams", ic: "clip", l: "Exams", r: "acts", tab: 1, g: "Class" },
   { k: "marks", ic: "check", l: "Marks approval", r: "ac", g: "Class" },
   { k: "guardian", ic: "sms", l: "Guardian results", r: "act", g: "Class" },
+  { k: "aitools", ic: "spark", l: "AI assistant", r: "act", g: "Class" },
+  { k: "psets", ic: "list", l: "Practice sets", r: "act", g: "Class" },
   { k: "syllabus", ic: "list", l: "Syllabus", r: "acts", g: "Class" },
   { k: "month", ic: "calendar", l: "Month", r: "act", g: "Results" },
   { k: "reports", ic: "chart", l: "Report", r: "acts", g: "Results" },
@@ -39,6 +41,7 @@ const NAV = [
   { k: "planner", ic: "calcheck", l: "Study planner", r: "s", g: "Study" },
   { k: "focus", ic: "timer", l: "Focus timer", r: "s", g: "Study" },
   { k: "aichat", ic: "bot", l: "AI assistant", r: "s", g: "Study" },
+  { k: "practice", ic: "clip", l: "Practice", r: "s", g: "Study" },
   { k: "suggestions", ic: "file", l: "Suggestions", r: "acts", g: "Library" },
   { k: "solutions", ic: "doc", l: "Exam solutions", r: "acts", g: "Library" },
   { k: "alerts", ic: "bell", l: "Alerts", r: "acts", g: "Account", badge: "bell" },
@@ -51,7 +54,7 @@ const NAV = [
   { k: "profile", ic: "user", l: "Profile", r: "acts", g: "Account" },
 ];
 // pages that exist but are not in the menu
-const HIDDEN = { share: "act", created: "act" };
+const HIDDEN = { share: "act", created: "act", pset: "act", solve: "s" };
 const navFor = () => NAV.filter((n) => n.r.includes(roleCode()));
 const pendingOnly = () => !!S.me && S.me.ap === false; // registered, waiting for the admin
 const allowed = (k) => {
@@ -242,7 +245,7 @@ async function boot() {
   if (!configured) { window.__riseReady = true; return renderNotConfigured(); }
   // page modules: one broken file must not stop the others
   S.moduleErrors = [];
-  const mods = ["pages-home.js", "pages-people.js", "pages-account.js", "pages-attendance.js", "pages-exams.js", "pages-results.js", "pages-fees.js", "pages-content.js", "pages-marks.js", "pages-transfer.js", "pages-perf.js", "pages-study.js"];
+  const mods = ["pages-home.js", "pages-people.js", "pages-account.js", "pages-attendance.js", "pages-exams.js", "pages-results.js", "pages-fees.js", "pages-content.js", "pages-marks.js", "pages-transfer.js", "pages-perf.js", "pages-study.js", "pages-practice.js"];
   // one after the other, in a fixed order, so the texts of the modules are always added in the same order (the files are preloaded in index.html)
   for (const m of mods) await import("./" + m).catch((e) => { console.error(m, e); S.moduleErrors.push(m + ": " + (e && e.message)); });
   onAuth((u) => { start(u).catch((e) => { console.error(e); S.loginMsg = dbError(e); signOutNow().catch(() => {}); }); });

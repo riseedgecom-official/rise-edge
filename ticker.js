@@ -134,6 +134,40 @@ const THEME = `
 
 /* three tiles on a phone: the last one takes the whole row instead of standing alone */
 @media(max-width:559px){.tiles-3>:last-child{grid-column:1/-1}}
+
+/* ---------- practice sets (pages-practice.js) ---------- */
+.pq{display:flex;flex-direction:column;gap:10px;border:1.5px solid var(--line);border-radius:var(--r);background:var(--card);padding:14px;min-width:0}
+.pq.is-ok{border-color:color-mix(in srgb,var(--ok) 55%,var(--line));background:color-mix(in srgb,var(--ok) 6%,var(--card))}
+.pq.is-bad{border-color:color-mix(in srgb,var(--bad) 55%,var(--line));background:color-mix(in srgb,var(--bad) 6%,var(--card))}
+.pq-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pq-h .btn{margin-left:auto}
+.pq textarea{min-height:64px;resize:vertical;font:inherit}
+.pq-o{display:flex;flex-direction:column;gap:8px}
+.pq-opt{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:1.5px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:var(--r-s);padding:9px 12px;min-height:46px;font:inherit;line-height:1.4;cursor:pointer;overflow-wrap:anywhere}
+div.pq-opt{cursor:default}
+label.pq-opt{padding:4px 8px 4px 12px;cursor:default}
+label.pq-opt input[type=radio]{width:22px;height:22px;min-height:0;flex:none;margin:0;accent-color:var(--ok);padding:0}
+label.pq-opt input[type=text]{border:0;background:transparent;min-height:40px;padding:6px 4px;flex:1;min-width:0}
+label.pq-opt input[type=text]:focus{outline:2px solid color-mix(in srgb,var(--blue) 45%,transparent);border-radius:8px}
+.pq-opt.on{border-color:var(--blue);background:color-mix(in srgb,var(--blue) 10%,var(--card));box-shadow:0 0 0 1.5px var(--blue)}
+.pq-opt.ok{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 12%,var(--card))}
+.pq-opt.bad{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 10%,var(--card))}
+.pq-opt:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+.pq-mk{flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:13px;background:var(--soft);color:var(--ink-2)}
+.pq-opt.on .pq-mk{background:var(--blue);color:#fff}
+.pq-opt.ok .pq-mk{background:var(--ok);color:#fff}
+.pq-opt.bad .pq-mk{background:var(--bad);color:#fff}
+.pq-why{border-left:4px solid var(--teal);background:color-mix(in srgb,var(--teal) 9%,var(--card));border-radius:0 var(--r-s) var(--r-s) 0;padding:10px 12px;line-height:1.55;overflow-wrap:anywhere}
+.pq-why b{display:block;margin-bottom:3px}
+.pq-how{border-left-color:var(--violet);background:color-mix(in srgb,var(--violet) 9%,var(--card))}
+.pthumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.pthumb{position:relative;width:84px;height:84px;border-radius:12px;overflow:hidden;border:1.5px solid var(--line-2);background:var(--soft)}
+.pthumb img{width:100%;height:100%;object-fit:cover;display:block}
+.pthumb button{position:absolute;top:3px;right:3px;width:26px;height:26px;border-radius:50%;border:0;background:rgba(0,0,0,.65);color:#fff;display:grid;place-items:center;cursor:pointer;padding:0}
+.pthumb button svg{width:15px;height:15px}
+.sc{display:flex;align-items:center;gap:16px}
+.sc>div:last-child{flex:1;min-width:0}
+.sc .tc{flex:none}
 `;
 function css() {
   if (typeof document === "undefined") return;

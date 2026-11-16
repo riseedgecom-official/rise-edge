@@ -11,7 +11,7 @@ const tiles = (list) => `<div class="tiles">${list.join("")}</div>`;
 const nav = (pg) => ({ act: "nav", arg: pg });
 const today = () => new Date().toLocaleDateString(S.lang === "bn" ? "bn-BD" : "en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 const welcome = (sub) => `<div class="welcome">${avatar(S.me, 56)}<div><h2>${esc(t("Welcome back, {n}!", { n: S.me.name }))}</h2><p class="mut">${esc(sub || today())}</p></div></div>`;
-// the top of every dashboard: greeting, and (when there are numbers) the rings in a white panel (theme.css)
+// the top of every dashboard: greeting, and (when there are numbers) the rings in a white panel
 const hero = (sub, rings, cap) => `<section class="hero">${welcome(sub)}${rings ? `<div class="hero-rings">${cap ? `<div class="mut sm" style="margin-bottom:8px">${esc(cap)}</div>` : ""}<div class="rings">${rings}</div></div>` : ""}</section>`;
 const sec = (title, html) => (html ? `<div class="sec-t">${esc(t(title))}</div>${html}` : "");
 
@@ -93,7 +93,7 @@ async function staffHome() {
     stat({ ic: "cap", label: t("Teachers"), value: teachers, color: "#0a9aa8", ...nav("teachers") }),
   ])}
   ${sec("Needs attention", attention)}
-  ${sec("Quick actions", quick([["attendance", "calcheck", "Attendance"], ["exams", "clip", "Exams"], ["students", "users", "Students"], ["teachers", "cap", "Teachers"], ...(fees ? [["fees", "wallet", "Fees"]] : []), ["resultsheet", "trophy", "Result sheet"]]))}
+  ${sec("Quick actions", quick([["attendance", "calcheck", "Attendance"], ["exams", "clip", "Exams"], ["students", "users", "Students"], ["teachers", "cap", "Teachers"], ...(fees ? [["fees", "wallet", "Fees"]] : []), ["resultsheet", "trophy", "Result sheet"], ["aitools", "spark", "AI assistant"]]))}
   ${fo ? `<div class="mt">${fo}</div>` : ""}${bo ? `<div class="mt">${bo}</div>` : ""}${ranks ? `<div class="mt">${ranks}</div>` : ""}${abs ? `<div class="mt">${abs}</div>` : ""}`;
 }
 
@@ -120,7 +120,7 @@ async function teacherHome() {
     stat({ ic: "check", label: t("Attendance taken"), value: `${done} / ${S.B.length}`, color: "var(--gold-ink)", sub: t("Today"), ...nav("attendance") }),
     stat({ ic: "plus", label: t("Add student"), value: "+", sub: t("New registration"), color: "#6a4cf0", act: "tch-addstu" }),
   ])}
-  ${sec("Quick actions", quick([["attendance", "calcheck", "Attendance"], ["exams", "clip", "Exams"], ["performance", "trend", "Performance"], ["syllabus", "list", "Syllabus"]]))}
+  ${sec("Quick actions", quick([["attendance", "calcheck", "Attendance"], ["exams", "clip", "Exams"], ["performance", "trend", "Performance"], ["aitools", "spark", "AI assistant"], ["psets", "list", "Practice sets"], ["syllabus", "list", "Syllabus"]]))}
   <div class="mt">${card(t("My classes"), S.B.length ? `<div class="list">${S.B.map(rowOf).join("")}</div>` : empty(t("No batch assigned yet."), "layers"))}</div>
   ${cls ? `<div class="mt">${cls}</div>` : ""}${sal ? `<div class="mt">${sal}</div>` : ""}
   ${ranks ? `<div class="mt">${ranks}</div>` : ""}`;
@@ -141,7 +141,7 @@ async function studentHome() {
     stat({ ic: "trophy", label: t("Exam rank"), value: r.er ? "#" + r.er : "–", sub: n ? t("of {n} students", { n }) : "", color: "#6a4cf0", ...nav("exams") }),
     stat({ ic: "star", label: t("Overall"), value: f1(r.ov), sub: r.or ? t("Rank #{r} of {n}", { r: r.or, n }) : "", color: "var(--blue)", ...nav("reports") }),
   ])}
-  ${sec("Quick actions", quick([["study", "spark", "Study"], ["aichat", "bot", "AI assistant"], ["performance", "trend", "Performance"], ["exams", "clip", "Results"], ["syllabus", "list", "Syllabus"], ["reports", "chart", "Report"], ["requests", "mega", "Requests"], ["idcard", "idcard", "ID card"]]))}
+  ${sec("Quick actions", quick([["study", "spark", "Study"], ["aichat", "bot", "AI assistant"], ["practice", "clip", "Practice"], ["performance", "trend", "Performance"], ["exams", "clip", "Results"], ["syllabus", "list", "Syllabus"], ["reports", "chart", "Report"], ["requests", "mega", "Requests"], ["idcard", "idcard", "ID card"]]))}
   ${rr ? `<div class="mt">${rr}</div>` : ""}${pf ? `<div class="mt">${pf}</div>` : ""}${cls ? `<div class="mt">${cls}</div>` : ""}${fee ? `<div class="mt">${fee}</div>` : ""}${nts ? `<div class="mt">${nts}</div>` : ""}`;
 }
 

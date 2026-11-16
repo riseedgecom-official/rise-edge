@@ -3,6 +3,7 @@
 // Until it is on (or when a call fails) the Study pages answer with the built-in helper (lib-coach.js).
 import { cfg } from "./config.js";
 import { db } from "./lib-db.js";
+import { staffSystem, staffPrompt } from "./lib-practice.js";
 
 const SDK = "12.14.0", CDN = "https://www.gstatic.com/firebasejs/" + SDK + "/";
 export const DEFAULT_MODEL = "gemini-3.8-flash";
@@ -41,8 +42,10 @@ export function systemText({ inst, cls, subjects }) {
 }
 
 let M = null;   // { key, model }: built once per configuration
-async function load(c, system) {
-  const key = [c.appId, c.key, c.model, system].join("|");
+const CHAT_GEN = { maxOutputTokens: 700, temperature: 0.5 };
+const STAFF_GEN = { maxOutputTokens: 8000, temperature: 0.4, responseMimeType: "application/json" };   // practice material: JSON, long
+async function load(c, system, gen = CHAT_GEN) {
+  const key = [c.appId, c.key, c.model, system, JSON.stringify(gen)].join("|");
   if (M && M.key === key) return M.model;
   const [{ initializeApp, getApps, deleteApp }, { initializeAppCheck, ReCaptchaEnterpriseProvider }, { getAI, getGenerativeModel, GoogleAIBackend }] = await Promise.all([
     import(CDN + "firebase-app.js"), import(CDN + "firebase-app-check.js"), import(CDN + "firebase-ai.js"),
@@ -52,7 +55,7 @@ async function load(c, system) {
   const app = initializeApp({ ...cfg, appId: c.appId }, "ai");
   initializeAppCheck(app, { provider: new ReCaptchaEnterpriseProvider(c.key), isTokenAutoRefreshEnabled: true });
   const ai = getAI(app, { backend: new GoogleAIBackend() });
-  const model = getGenerativeModel(ai, { model: c.model, systemInstruction: system, generationConfig: { maxOutputTokens: 700, temperature: 0.5 } });
+  const model = getGenerativeModel(ai, { model: c.model, systemInstruction: system, generationConfig: gen });
   M = { key, model };
   return model;
 }
@@ -67,7 +70,7 @@ export function aiProblem(e) {
   if (/network|offline|failed to fetch|load failed|unavailable|\b5\d\d\b|dynamically imported|importing a module/.test(s)) return "net";
   return "other";
 }
-const race = (p) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(Object.assign(new Error("The AI did not answer in time."), { code: "timeout" })), TIMEOUT))]);
+const race = (p, ms = TIMEOUT) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(Object.assign(new Error("The AI did not answer in time."), { code: "timeout" })), ms))]);
 
 // history = [{ me: bool, text }] (the last few turns), question = the new text. Returns the answer text; throws on any problem.
 export async function askAI({ question, history = [], ctx = {}, inst = "Rise Edge Academy" }) {
@@ -83,6 +86,22 @@ export async function askAI({ question, history = [], ctx = {}, inst = "Rise Edg
   const text = String(res.response.text() || "").trim();
   if (!text) throw Object.assign(new Error("The AI returned nothing."), { code: "blocked" });
   return text;
+}
+
+// A teacher / admin asks for practice material from photos and / or a topic. images = [{ mime, data (base64) }]. Returns the answer text (JSON,
+// read with fromAi in lib-practice.js); throws on any problem. Only the class, subject, the teacher's words and the photos are sent: no student data.
+export async function askStaffAI({ task, cls = "", grp = "", subject = "", count = 10, text = "", images = [], inst = "Rise Edge Academy" }) {
+  const c = await aiConfig();
+  if (!aiReady(c)) throw Object.assign(new Error("The AI is not turned on."), { code: "off" });
+  const system = staffSystem({ inst, cls, grp }), prompt = staffPrompt({ task, count, subject, text, photos: images.length });
+  const h = hook();
+  if (h) return String(await h({ prompt, system, question: String(text || ""), task, images: images.length, json: true })).trim();
+  const model = await race(load(c, system, STAFF_GEN));
+  const parts = [{ text: prompt }, ...images.slice(0, 3).map((im) => ({ inlineData: { mimeType: im.mime || "image/jpeg", data: im.data } }))];
+  const res = await race(model.generateContent(parts), 90000);
+  const out = String(res.response.text() || "").trim();
+  if (!out) throw Object.assign(new Error("The AI returned nothing."), { code: "blocked" });
+  return out;
 }
 
 // the admin's "Test the AI" button: { ok, text | problem, detail }

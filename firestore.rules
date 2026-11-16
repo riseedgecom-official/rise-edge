@@ -18,6 +18,8 @@ service cloud.firestore {
     function myc() { return apd() ? me().get('cls', '') : ''; }
     function tch(b) { return request.auth != null && me().role == 'teacher' && me().get('ap', true) != false && me().get('active', true) != false && b in me().bids; }
     function tpub() { return me().get('pub', false) == true; }
+    // a practice set (see lib-practice.js): checked and sent by a teacher / admin to ONE batch
+    function psOk(x) { return x.keys().hasOnly(['bid', 'ti', 'sb', 'by', 'bn', 'd', 'u', 'nt', 'qs', 'sq', 'ai']) && x.ti is string && x.ti.size() > 0 && x.ti.size() <= 120 && x.nt is string && x.nt.size() <= 6000 && x.qs is list && x.qs.size() <= 40 && x.sq is list && x.sq.size() <= 30 && x.by is string && x.d is number; }
     function fresh() { return !exists(/databases/$(d)/documents/config/init); }
     function regOpen() { return !exists(/databases/$(d)/documents/config/reg) || get(/databases/$(d)/documents/config/reg).data.get('open', true) != false; }
 
@@ -47,7 +49,7 @@ service cloud.firestore {
       allow create: if request.auth != null && regOpen() && id.matches('[ST][0-9]{4}') && request.resource.data.keys().hasOnly(['n']) && request.resource.data.n is int && request.resource.data.n >= 1 && request.resource.data.n <= 100000;
       allow update: if request.auth != null && regOpen() && request.resource.data.keys().hasOnly(['n']) && request.resource.data.n is int && request.resource.data.n > resource.data.n && request.resource.data.n <= resource.data.n + 1000;
     }
-    match /ver/{v} { allow read: if v == 'v20261115'; }   // version stamp: the app reads ver/<this text>; allowed = these rules are the published ones (RULES_VER in lib-svc.js)
+    match /ver/{v} { allow read: if v == 'v20261116'; }   // version stamp: the app reads ver/<this text>; allowed = these rules are the published ones (RULES_VER in lib-svc.js)
     match /login/{id} {   // roll -> login email(s)
       allow read: if true;
       // the login address is roll@rise.local, or roll.xxxx@rise.local when that roll number belongs to an account that was deleted and is used again
@@ -144,6 +146,23 @@ service cloud.firestore {
     match /sp/{id} {   // a student's own study planner (tasks), focus log and daily AI counter: only he reads and writes it (the admin through the wildcard above)
       allow read: if request.auth != null && sid() == id && apd();
       allow create, update: if request.auth != null && sid() == id && apd() && me().role == 'student' && request.resource.data.keys().hasOnly(['tasks', 'log', 'hrs', 'ai', 't']) && request.resource.data.tasks is list && request.resource.data.tasks.size() <= 150 && request.resource.data.log is map && request.resource.data.log.size() <= 400 && request.resource.data.hrs is map && request.resource.data.ai is map;
+    }
+    // practice sets: a teacher (of the batch) or the admin sends material to a batch; its students read it and solve it for practice (no marks).
+    // Only the person who made a set (or the admin / co-admin through the wildcard) changes or deletes it.
+    match /ps/{id} {
+      allow read: if request.auth != null && resource.data.bid == myb();
+      allow read: if tch(resource.data.bid);
+      allow create: if tch(request.resource.data.bid) && request.resource.data.by == sid() && psOk(request.resource.data);
+      allow update: if tch(resource.data.bid) && resource.data.by == sid() && request.resource.data.bid == resource.data.bid && request.resource.data.by == resource.data.by && psOk(request.resource.data);
+      allow delete: if tch(resource.data.bid) && resource.data.by == sid();
+    }
+    // a student's latest try of a set (his chosen options, and the questions he reported as wrong); the teachers of the batch read them
+    match /pt/{id} {
+      allow read: if request.auth != null && resource.data.sid == sid() && apd();
+      allow get: if request.auth != null && apd() && id.split('_')[1] == sid();   // his own try, also when he has none yet
+      allow read: if tch(resource.data.bid);
+      allow create, update: if request.auth != null && apd() && me().role == 'student' && request.resource.data.sid == sid() && id == request.resource.data.qid + '_' + sid() && request.resource.data.bid == myb() && request.resource.data.keys().hasOnly(['sid', 'qid', 'bid', 'a', 'n', 't', 'k', 'fl']) && request.resource.data.qid is string && request.resource.data.a is map && request.resource.data.a.size() <= 40 && request.resource.data.fl is map && request.resource.data.fl.size() <= 40;
+      allow delete: if tch(resource.data.bid);   // a teacher clears the tries of a set he deletes
     }
     match /ms/{id} {   // student's own "I am confident" ticks
       allow read: if request.auth != null && sid() == id && apd();
