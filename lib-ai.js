@@ -18,13 +18,13 @@ export async function aiConfig(force = false) {
   let d = null;
   try { d = await db.get("config/ai"); } catch (e) { d = null; }
   d = d || {};
-  C = { on: d.on === true, appId: String(d.appId || "").trim(), key: String(d.key || "").trim(), model: String(d.model || "").trim() || DEFAULT_MODEL, lim: Math.max(1, Math.min(200, Math.round(+d.lim) || DEFAULT_LIMIT)) };
+  C = { on: d.on === true, gk: String(d.gk || "").trim(), appId: String(d.appId || "").trim(), key: String(d.key || "").trim(), model: String(d.model || "").trim() || DEFAULT_MODEL, lim: Math.max(1, Math.min(200, Math.round(+d.lim) || DEFAULT_LIMIT)) };
   ct = Date.now();
   return C;
 }
 export const dropAiConfig = () => { C = null; ct = 0; M = null; A = null; };
 const hook = () => (typeof window !== "undefined" && typeof window.__aiMock === "function" ? window.__aiMock : null);   // tests only
-export const aiReady = (c) => !!(c && c.on && (hook() || (c.appId && c.key)));
+export const aiReady = (c) => !!(c && c.on && (hook() || c.gk || (c.appId && c.key)));
 
 // what the model is told. No name, phone or address of the student is ever sent: only his class and his lowest subjects.
 export function systemText({ inst, cls, subjects }) {
@@ -62,7 +62,29 @@ async function client(c) {
   A = { key, ai: getAI(app, { backend: new GoogleAIBackend(), useLimitedUseAppCheckTokens: true }), getGenerativeModel, check, getToken, app, c };
   return A;
 }
+// THE SIMPLE WAY: Google's Gemini API with an API key from Google AI Studio (config/ai.gk). No Firebase AI Logic, no App Check, no Web app ID.
+// It answers like the SDK's model does (generateContent(parts) -> { response: { text() } }), so the rest of this file does not care which way is used.
+function direct(c, system, gen) {
+  return {
+    async generateContent(parts) {
+      const body = { contents: [{ role: "user", parts: (Array.isArray(parts) ? parts : [parts]).map((p) => (typeof p === "string" ? { text: p } : p)) }], generationConfig: gen };
+      if (system) body.systemInstruction = { parts: [{ text: system }] };
+      const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(c.model) + ":generateContent",
+        { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": c.gk }, body: JSON.stringify(body) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { const er = (j && j.error) || {}; throw Object.assign(new Error("[" + r.status + "] " + (er.message || r.statusText || "error") + (er.status ? " (" + er.status + ")" : "")), { code: "gemini/" + r.status }); }
+      const cand = (j.candidates || [])[0] || {};
+      const text = ((cand.content && cand.content.parts) || []).filter((p) => p && typeof p.text === "string" && !p.thought).map((p) => p.text).join("");
+      if (!text) {
+        const why = (j.promptFeedback && j.promptFeedback.blockReason) || cand.finishReason || "";
+        throw new Error(why ? "Response was blocked due to " + why : "The AI gave an empty answer");
+      }
+      return { response: { text: () => text } };
+    },
+  };
+}
 async function load(c, system, gen = CHAT_GEN) {
+  if (c.gk) return direct(c, system, gen);
   const key = [c.appId, c.key, c.model, system, JSON.stringify(gen)].join("|");
   if (M && M.key === key) return M.model;
   const a = await client(c);
@@ -127,7 +149,7 @@ async function probe() {
 async function why(e) {
   try {
     const s = String((e && e.message) || e);
-    if (!/app.?check|\b401\b/i.test(s) || /\| App Check/.test(s) || !A || !A.check) return e;
+    if (!/app.?check|\b401\b/i.test(s) || /\| App Check/.test(s) || !A || !A.check || (C && C.gk)) return e;
     let note = "";
     try { await A.getToken(A.check, true); note = " | App Check made a token fine here: check that the Web app is registered in Firebase Console > App Check > Apps and that replay protection is not blocking it."; }
     catch (x) { note = " | App Check: " + String((x && x.code) || "") + " " + String((x && x.message) || x).slice(0, 160); }

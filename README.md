@@ -95,6 +95,14 @@ Firebase → **Authentication → Settings → Authorized domains → Add domain
 
 ### এআই পড়ার সহকারী (ঐচ্ছিক, ফ্রি)
 ছাত্রদের **Study** মেনুতে পড়ার প্ল্যানার, ফোকাস টাইমার ও চ্যাট সহকারী আছে। সহকারী নিজের ফল ও উপস্থিতি দেখে পরামর্শ দেয় — এর জন্য কোনো সেটআপ লাগে না। যেকোনো পড়ার প্রশ্নের উত্তর (Gemini) চাইলে একবার এটা করুন:
+**সহজ উপায় (২ মিনিট, reCAPTCHA / Web App ID লাগে না):**
+1. aistudio.google.com/apikey → Google দিয়ে সাইন ইন → **Create API key**।
+2. Google Cloud → APIs & Services → Credentials → ওই key খুলে *Website restrictions* এ `riseedgecom-official.github.io/*` দিন এবং *API restrictions* এ **Generative Language API** বাছুন। প্রজেক্টে billing চালু করবেন না (তাহলে সীমা পেরোলে টাকা কাটার সুযোগ থাকে না)।
+3. অ্যাপে Settings → *AI study assistant* → **Gemini API key** ঘরে বসান, AI chat **On**, Save, তারপর **Test the AI**।
+4. Save এর আগে সর্বশেষ `firestore.rules` (stamp `v20261117`) Firebase Console → Firestore Database → Rules এ পুরো ফাইল পেস্ট করে Publish করতে হবে — না হলে অ্যাপ key সেভ করতে দেবে না (কারণ key যেন সাইন ইন না করা কেউ পড়তে না পারে)।
+**সতর্কতা:** এই উপায়ে key ডাটাবেসে থাকে, তাই সাইন ইন করা সবাই (ছাত্র সহ) প্রযুক্তিগতভাবে তা পড়তে পারে। শুধু এই কাজের জন্য আলাদা key বানান, referrer সীমা দিন, billing বন্ধ রাখুন। বেশি নিরাপত্তা চাইলে নিচের Firebase উপায় (key লুকানো থাকে, কিন্তু ধাপ বেশি)।
+
+**Firebase উপায় (App Check):**
 1. Firebase Console → Project settings → Your apps → **Web** অ্যাপ (</>) যোগ করুন (না থাকলে) এবং তার **App ID** কপি করুন (`1:…:web:…`)। Android এর App ID চলবে না।
 2. Firebase Console → Build → **AI Logic** → Get started → *Gemini Developer API* (ফ্রি প্ল্যান আছে)।
 3. Google Cloud → **Fraud Defense** (আগের নাম reCAPTCHA Enterprise) → Web ধরনের **score-based** key বানান, ডোমেইন দিন (যেমন `riseedgecom-official.github.io`, `https://` ছাড়া)। Firebase Console → **App Check** → Apps → Web অ্যাপে **Fraud Defense (reCAPTCHA Enterprise)** বেছে ওই একই key দিন। (পুরনো reCAPTCHA v3 বাতিল হয়ে গেছে, ব্যবহার করবেন না।)

@@ -154,7 +154,7 @@ const inTime = (p, what) => {
 const isDenied = (e) => e && (e.code === "permission-denied" || /permission/i.test(String(e.message || "")));
 // Are the rules in Firebase the ones of this app? firestore.rules lets anybody read ver/<RULES_VER> and nothing else of that name, so the
 // read is refused only when the published rules are older (or not published at all). true / false / null (cannot tell: no internet)
-export const RULES_VER = "v20261116";
+export const RULES_VER = "v20261117";
 export async function rulesCurrent() {
   try { await db.get("ver/" + RULES_VER); return true; } catch (e) { return isDenied(e) ? false : null; }
 }
