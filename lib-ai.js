@@ -141,7 +141,7 @@ export async function askStaffAI({ task, cls = "", grp = "", subject = "", count
   };
   try { return await retrying(() => run(true)); }
   catch (e) {   // the SDK or the model did not like the schema: the same request again, with the format only described
-    if (schema && /schema|invalid.?argument|\b400\b/i.test(String((e && e.message) || e))) return await retrying(() => run(false));
+    if (schema && (/schema|invalid.?argument|\b400\b/i.test(String((e && e.message) || e)) || aiProblem(e) === "other")) return await retrying(() => run(false));
     throw e;
   }
 }

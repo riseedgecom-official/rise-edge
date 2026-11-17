@@ -156,6 +156,7 @@ input.pq-c{min-height:40px;font-size:14px}
 .pr-msg.ai{align-self:flex-start;background:var(--card);border:1px solid var(--line);border-bottom-left-radius:4px}
 .pr-msg.me{align-self:flex-end;background:color-mix(in srgb,var(--blue) 14%,var(--card));border:1px solid color-mix(in srgb,var(--blue) 38%,var(--line));border-bottom-right-radius:4px}
 .pr-msg.err{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 8%,var(--card))}
+.pr-det{display:block;margin-top:6px;font-size:11px;line-height:1.4;opacity:.75;overflow-wrap:anywhere}
 .pr-msg svg{width:14px;height:14px;vertical-align:-2px}
 .pr-msg-f{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px}
 .pr-msg-f span{font-size:11px;padding:1px 8px;border-radius:999px;background:color-mix(in srgb,var(--ink) 8%,transparent)}

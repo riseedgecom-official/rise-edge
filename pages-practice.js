@@ -71,7 +71,7 @@ addBN({
   "Take a photo of a book page, a question paper or your notes, or write a topic. The AI makes a first draft and you check it before it goes to students.": "বইয়ের পাতা, প্রশ্নপত্র বা নোটের ছবি তুলুন, অথবা একটি বিষয় লিখুন। এআই প্রথম খসড়া বানাবে, শিক্ষার্থীদের কাছে যাওয়ার আগে আপনি যাচাই করবেন।",
   "e.g. Physics": "যেমন: পদার্থবিজ্ঞান", "Take photo": "ছবি তুলুন", "Choose photo": "ছবি বাছুন", "Remove photo": "ছবি সরান",
   "Topic or instruction (optional)": "বিষয় বা নির্দেশ (ঐচ্ছিক)", "e.g. Chapter 3, Newton's laws, make it a bit hard": "যেমন: তৃতীয় অধ্যায়, নিউটনের সূত্র, একটু কঠিন করুন", "What should the AI make?": "এআই কী বানাবে?", "How many questions?": "কয়টি প্রশ্ন?",
-  "The AI is working...": "এআই কাজ করছে...", "Make a draft": "খসড়া বানান", "Photos, files and your words go to Google's AI. Do not include students' names or phone numbers.": "ছবি, ফাইল ও আপনার লেখা গুগলের এআই এর কাছে যায়। শিক্ষার্থীদের নাম বা ফোন নম্বর দেবেন না।",
+  "The AI is working...": "এআই কাজ করছে...", "Details:": "বিস্তারিত:", "Make a draft": "খসড়া বানান", "Photos, files and your words go to Google's AI. Do not include students' names or phone numbers.": "ছবি, ফাইল ও আপনার লেখা গুগলের এআই এর কাছে যায়। শিক্ষার্থীদের নাম বা ফোন নম্বর দেবেন না।",
   
   "You used today's {n} AI requests. Try again tomorrow, or write the questions by hand.": "আজকের {n}টি এআই অনুরোধ শেষ। কাল আবার চেষ্টা করুন, অথবা নিজে প্রশ্ন লিখুন।",
   "{n} questions added. Check every answer before you send.": "{n}টি প্রশ্ন যোগ হয়েছে। পাঠানোর আগে প্রতিটি উত্তর যাচাই করুন।", "Notes added. Read them before you send.": "নোট যোগ হয়েছে। পাঠানোর আগে পড়ে নিন।",
@@ -192,6 +192,8 @@ const problemText = (e) => {
     blocked: t("The AI could not answer that. Change the photo or the words and try again."),
   })[aiProblem(e)] || t("The AI could not answer that. Change the photo or the words and try again.");
 };
+// the real reason, for the teacher / admin to read out or send as a screenshot (links are cut: they hold the project id)
+const errDetail = (e) => String(((e && e.code) ? e.code + ": " : "") + ((e && e.message) || e || "")).replace(/https?:\/\/\S+/g, "...").replace(/\s+/g, " ").trim().slice(0, 260);
 const PROB = {
   title: (p) => t("Write a title for the set."),
   q: (p) => t("Question {n} has no text.", { n: p.n }),
@@ -229,7 +231,7 @@ const chatHtml = (u) => {
   return msgs.map((m) => `<div class="pr-msg ${m.me ? "me" : "ai"}${m.err ? " err" : ""}">
     ${m.files && m.files.length ? `<div class="pr-msg-f">${m.files.map((n) => `<span>${icon("file")}${esc(n)}</span>`).join("")}</div>` : ""}
     ${m.badge ? `<div class="pr-badge">${icon("spark")} <b>${esc(t("The AI understood:"))}</b> ${esc(m.badge)}</div>` : ""}
-    <div>${esc(m.text).replace(/\n/g, "<br>")}</div></div>`).join("") +
+    <div>${esc(m.text).replace(/\n/g, "<br>")}</div>${m.detail ? `<small class="pr-det">${esc(t("Details:"))} ${esc(m.detail)}</small>` : ""}</div>`).join("") +
     (u.busy ? `<div class="pr-msg ai"><div>${icon("refresh")} ${esc(t("The AI is reading your words and files and making the questions..."))}</div></div>` : "");
 };
 
@@ -388,7 +390,7 @@ async function send(raw) {
       : edit && a !== d.qs.length ? t("The AI changed the set ({a} to {b} questions). Check what changed.", { a, b: d.qs.length })
       : edit ? t("The AI changed the set. Check what changed.") : t("{n} questions added. Check every answer before you send.", { n: r.qs.length + r.sq.length }), "ok");
   } catch (e) {
-    say(u, { err: true, text: (e && e.say ? e.say + "\n" : "") + problemText(e) });
+    say(u, { err: true, text: (e && e.say ? e.say + "\n" : "") + problemText(e), detail: errDetail(e) });
     toast(problemText(e), "bad");
   } finally { u.busy = false; refresh(); toBottom(); }
 }
