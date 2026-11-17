@@ -87,6 +87,16 @@ export const DIFS = ["easy", "medium", "hard", "board"];            // how hard
 export const KINDS = ["mcq", "scenario", "tf"];                      // what kind of multiple-choice question
 export const LVLS = ["mixed", "know", "under", "apply", "hots"];     // the thinking level (Bloom; NCTB: জ্ঞান, অনুধাবন, প্রয়োগ, উচ্চতর দক্ষতা)
 export const LANGS = ["auto", "bn", "en"];                           // the language of the questions
+// What Google answered to App Check's token call (HTTP status, error reason, message) -> which thing the admin has to fix (see HINTS in pages-practice.js)
+export function acHint(status, reason, msg) {
+  const s = String(msg || "").toLowerCase(), r = String(reason || "");
+  if (status >= 200 && status < 300) return "ok";
+  if (r === "API_KEY_HTTP_REFERRER_BLOCKED" || /referer|referrer/.test(s)) return "referrer";
+  if (r === "API_KEY_SERVICE_BLOCKED" || /requests to this api .* are blocked/.test(s)) return "apiblocked";
+  if (r === "SERVICE_DISABLED" || /has not been used|is disabled|api .*not enabled/.test(s)) return "disabled";
+  if (r === "API_KEY_INVALID" || /api key not valid|api key expired/.test(s)) return "apikey";
+  return "register";
+}
 export const COUNTS = [3, 4, 5, 8, 10, 15, 20, 30];
 export const DIF_LABEL = { easy: "Easy", medium: "Medium", hard: "Hard", board: "Board Standard" };
 export const KIND_LABEL = { mcq: "MCQ (4 Options)", scenario: "উদ্দীপক ভিত্তিক (Scenario)", tf: "True / False" };

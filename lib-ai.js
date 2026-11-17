@@ -3,7 +3,8 @@
 // Until it is on (or when a call fails) the Study pages answer with the built-in helper (lib-coach.js).
 import { cfg } from "./config.js";
 import { db } from "./lib-db.js";
-import { staffSystem, staffPrompt, tutorSystem, tutorPrompt, regenPrompt, cardsPrompt, REGEN_SYSTEM, CARDS_SYSTEM, MCQ_SCHEMA, ONE_SCHEMA, CARDS_SCHEMA } from "./lib-practice.js";
+import { t, addBN } from "./lib-core.js";
+import { acHint, staffSystem, staffPrompt, tutorSystem, tutorPrompt, regenPrompt, cardsPrompt, REGEN_SYSTEM, CARDS_SYSTEM, MCQ_SCHEMA, ONE_SCHEMA, CARDS_SCHEMA } from "./lib-practice.js";
 
 const SDK = "12.14.0", CDN = "https://www.gstatic.com/firebasejs/" + SDK + "/";
 export const DEFAULT_MODEL = "gemini-3.8-flash";
@@ -58,7 +59,7 @@ async function client(c) {
   const app = initializeApp({ ...cfg, appId: c.appId }, "ai");
   const check = initializeAppCheck(app, { provider: new ReCaptchaEnterpriseProvider(c.key), isTokenAutoRefreshEnabled: true });
   // limited-use App Check tokens (SDK 12.14+): they are also accepted when "replay protection" is on in the Firebase Console
-  A = { key, ai: getAI(app, { backend: new GoogleAIBackend(), useLimitedUseAppCheckTokens: true }), getGenerativeModel, check, getToken };
+  A = { key, ai: getAI(app, { backend: new GoogleAIBackend(), useLimitedUseAppCheckTokens: true }), getGenerativeModel, check, getToken, app, c };
   return A;
 }
 async function load(c, system, gen = CHAT_GEN) {
@@ -80,13 +81,58 @@ export function aiProblem(e) {
   if (/network|offline|failed to fetch|load failed|unavailable|\b5\d\d\b|dynamically imported|importing a module/.test(s)) return "net";
   return "other";
 }
+// What the admin has to do for each answer of acHint (lib-practice.js); shown by the Co-Pilot and by Settings > Test the AI
+const AC_TEXT = {
+ "ok": "App Check works now, but this browser tab still remembers the old failure. Close the app tab and open it again, then try.",
+ "referrer": "Your Firebase API key does not allow this website. Google Cloud > APIs & Services > Credentials > open the Browser key > Websites: add {host}/* (or choose no website restriction). Save, wait 2 minutes, then try again.",
+ "apiblocked": "Your Firebase API key does not allow the Firebase App Check API. Google Cloud > APIs & Services > Credentials > open the Browser key > API restrictions: add Firebase App Check API and Firebase AI Logic API (or choose Don't restrict key). Save, wait 2 minutes, then try again.",
+ "disabled": "The Firebase App Check API is switched off. Google Cloud > APIs & Services > Library > Firebase App Check API > Enable. Then try again.",
+ "apikey": "The Firebase API key is not valid. Compare apiKey in config.js with Firebase Console > Project settings > Your apps.",
+ "key": "reCAPTCHA does not accept the site key on this website. In Google Cloud > Fraud Defense the key must be a Web, score-based key with {host} in its domains, and Settings must hold the same key.",
+ "register": "Firebase App Check does not accept this key for this app. In Firebase Console > App Check > Apps open the Web app whose App ID is in Settings and register it with Fraud Defense (reCAPTCHA Enterprise) and the same site key."
+};
+const AC_BN = {
+ "ok": "App Check এখন কাজ করছে, কিন্তু এই ব্রাউজার ট্যাব পুরনো ব্যর্থতা মনে রেখেছে। অ্যাপের ট্যাবটি বন্ধ করে আবার খুলুন, তারপর চেষ্টা করুন।",
+ "referrer": "আপনার Firebase API key এই ওয়েবসাইটকে অনুমতি দেয়নি। Google Cloud > APIs & Services > Credentials > Browser key খুলুন > Websites এ {host}/* যোগ করুন (বা ওয়েবসাইট সীমাবদ্ধতা তুলে দিন)। Save করে ২ মিনিট অপেক্ষা করুন, তারপর চেষ্টা করুন।",
+ "apiblocked": "আপনার Firebase API key Firebase App Check API-কে অনুমতি দেয়নি। Google Cloud > APIs & Services > Credentials > Browser key খুলুন > API restrictions এ Firebase App Check API ও Firebase AI Logic API যোগ করুন (বা Don't restrict key বাছুন)। Save করে ২ মিনিট অপেক্ষা করুন, তারপর চেষ্টা করুন।",
+ "disabled": "Firebase App Check API বন্ধ আছে। Google Cloud > APIs & Services > Library > Firebase App Check API > Enable করুন। তারপর চেষ্টা করুন।",
+ "apikey": "Firebase API key সঠিক নয়। config.js এর apiKey Firebase Console > Project settings > Your apps এর সাথে মিলিয়ে দেখুন।",
+ "key": "reCAPTCHA এই ওয়েবসাইটে সাইট কী গ্রহণ করছে না। Google Cloud > Fraud Defense এ কী-টি Web ধরনের score-based হতে হবে এবং ডোমেইনে {host} থাকতে হবে, আর Settings এ একই কী থাকতে হবে।",
+ "register": "Firebase App Check এই অ্যাপের জন্য এই কী গ্রহণ করছে না। Firebase Console > App Check > Apps এ Settings এর App ID-র Web অ্যাপটি খুলে Fraud Defense (reCAPTCHA Enterprise) ও একই সাইট কী দিয়ে রেজিস্টার করুন।"
+};
+addBN(Object.fromEntries(Object.keys(AC_TEXT).map((k) => [AC_TEXT[k], AC_BN[k]])));
+export const appCheckText = (hint, host) => (AC_TEXT[hint] ? t(AC_TEXT[hint], { host }) : "");
+// App Check says only "403 error" when its token call is refused. Do the same call here by hand, to read the answer Google gives (which key, which API, which website is refused).
+const WAIT = (ms) => new Promise((ok) => setTimeout(ok, ms));
+const recaptcha = (key) => new Promise((ok, no) => {
+  const go = () => (window.grecaptcha && window.grecaptcha.enterprise) ? window.grecaptcha.enterprise.ready(() => ok(window.grecaptcha.enterprise)) : no(new Error("reCAPTCHA did not load"));
+  if (window.grecaptcha && window.grecaptcha.enterprise) return go();
+  const s = document.createElement("script");
+  s.src = "https://www.google.com/recaptcha/enterprise.js?render=" + encodeURIComponent(key);
+  s.onload = go; s.onerror = () => no(new Error("reCAPTCHA script blocked"));
+  document.head.appendChild(s);
+});
+async function probe() {
+  const o = A.app.options, c = A.c;
+  let token;
+  try { token = await (await recaptcha(c.key)).execute(c.key, { action: "fire_app_check" }); }
+  catch (x) { return { hint: "key", text: "reCAPTCHA: " + String((x && x.message) || x).slice(0, 160) }; }
+  const r = await fetch("https://content-firebaseappcheck.googleapis.com/v1/projects/" + o.projectId + "/apps/" + c.appId + ":exchangeRecaptchaEnterpriseToken?key=" + encodeURIComponent(o.apiKey),
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ recaptcha_enterprise_token: token }) });
+  const j = await r.json().catch(() => ({}));
+  const er = (j && j.error) || {}, reason = ((er.details || []).find((d) => d && d.reason) || {}).reason || "";
+  return { hint: acHint(r.status, reason, er.message), text: "Token call: HTTP " + r.status + (er.status ? " " + er.status : "") + (reason ? " " + reason : "") + (er.message ? " - " + String(er.message).slice(0, 160) : "") };
+}
 // An App Check problem (HTTP 401 "token is invalid"): ask App Check itself why it could not make a token and add that to the error, so the real reason is on the screen.
 async function why(e) {
   try {
     const s = String((e && e.message) || e);
     if (!/app.?check|\b401\b/i.test(s) || /\| App Check/.test(s) || !A || !A.check) return e;
-    try { await A.getToken(A.check, true); e.message = s + " | App Check made a token fine here: check that the Web app is registered in Firebase Console > App Check > Apps and that replay protection is not blocking it."; }
-    catch (x) { e.message = s + " | App Check: " + String((x && x.code) || "") + " " + String((x && x.message) || x).slice(0, 220); }
+    let note = "";
+    try { await A.getToken(A.check, true); note = " | App Check made a token fine here: check that the Web app is registered in Firebase Console > App Check > Apps and that replay protection is not blocking it."; }
+    catch (x) { note = " | App Check: " + String((x && x.code) || "") + " " + String((x && x.message) || x).slice(0, 160); }
+    try { const p = await Promise.race([probe(), WAIT(9000).then(() => null)]); if (p) { note += " | " + p.text; e.hint = p.hint; } } catch (_) { /* the note above is enough */ }
+    e.message = s + note;
   } catch (_) { /* the original error is thrown */ }
   return e;
 }
@@ -194,6 +240,6 @@ export async function askCards({ topic, cls = "" }) {
 export async function testAI(c) {
   const saved = C; C = { ...c, on: true }; ct = Date.now(); M = null;
   try { const text = await askAI({ question: "Reply with the single word OK.", inst: "Rise Edge Academy" }); return { ok: true, text }; }
-  catch (e) { await why(e); return { ok: false, problem: aiProblem(e), detail: String((e && e.message) || e).slice(0, 420) }; }
+  catch (e) { await why(e); return { ok: false, problem: aiProblem(e), hint: e && e.hint, detail: String((e && e.message) || e).slice(0, 520) }; }
   finally { C = saved; M = null; }
 }

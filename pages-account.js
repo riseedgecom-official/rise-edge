@@ -5,7 +5,7 @@ import {
   S, esc, t, page, act, onChange, onSubmit, formData, pageState, refresh, isStaff, isAdmin, isTeacher, isStudent, instName, addBN, batchOf, activeStudents, isEmail, cmp, ago,
 } from "./lib-core.js";
 import { icon, avatar, tag, empty, notice, card, row, btn, chips, input, textarea, select, batchPicker, form, toast, showDoc, ask, info } from "./lib-ui.js";
-import { aiConfig, dropAiConfig, testAI, DEFAULT_MODEL, DEFAULT_LIMIT } from "./lib-ai.js";
+import { aiConfig, dropAiConfig, testAI, appCheckText, DEFAULT_MODEL, DEFAULT_LIMIT } from "./lib-ai.js";
 import { reloadMe, saveInst, squarePhoto, mailCfg, sendMail, adminIdPlan, claimAdminId } from "./lib-svc.js";
 import { noticeList, SPEEDS, THEMES, MAX_NOTICES, MAX_TEXT } from "./ticker.js";
 import { qrSvg, qrMatrix } from "./lib-qr.js";
@@ -312,7 +312,7 @@ act("st-ai-test", async (b) => {
   toast(t("Testing... this can take a few seconds."));
   const r = await testAI(c);
   const why = { quota: t("The daily limit is reached or Google says too many requests."), setup: t("Setup problem: check the Web app ID, the site key, App Check and the API key (see the steps above)."), net: t("The AI could not be reached (internet?)."), blocked: t("The AI refused to answer."), other: t("Something else went wrong.") };
-  await info(r.ok ? t("It works. The AI answered: {x}", { x: r.text.slice(0, 80) }) : (why[r.problem] || why.other) + "\n\n" + r.detail, r.ok ? t("AI test passed") : t("AI test failed"));
+  await info(r.ok ? t("It works. The AI answered: {x}", { x: r.text.slice(0, 80) }) : (appCheckText(r.hint, location.hostname) || why[r.problem] || why.other) + "\n\n" + r.detail, r.ok ? t("AI test passed") : t("AI test failed"));
 });
 onSubmit("st-mail", async (b) => {
   const f = formData(b.closest("form"));

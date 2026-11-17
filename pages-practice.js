@@ -8,7 +8,7 @@ import { db } from "./lib-db.js";
 import { S, esc, t, page, act, onChange, onInput, pageState, refresh, go, isStaff, isTeacher, isStudent, addBN, fmtDate, dhakaDate, ago, activeStudents, T } from "./lib-core.js";
 import { icon, avatar, card, row, btn, empty, notice, tag, toast, form, info, ask, chips, meter, ring } from "./lib-ui.js";
 import { timeId, notify } from "./lib-svc.js";
-import { aiConfig, aiReady, askStaffAI, askTutor, askCards, aiProblem } from "./lib-ai.js";
+import { aiConfig, aiReady, askStaffAI, askTutor, askCards, aiProblem, appCheckText } from "./lib-ai.js";
 import { withAiBudget } from "./pages-study.js";
 import { blankMcq, blankShort, fromAi, cardsFrom, mergeRefined, weakTopics, cleanSet, scoreSet, setStats, MAX_Q, MAX_SQ, MAX_NOTES, LIM, TASKS, DIFS, KINDS, LVLS, LANGS, COUNTS, DIF_LABEL, KIND_LABEL, LVL_LABEL, LANG_LABEL } from "./lib-practice.js";
 
@@ -185,6 +185,7 @@ const problemText = (e) => {
   if (e && e.code === "off") return t("The AI is not turned on yet.");
   if (e && e.code === "unreadable") return t("The AI could not read the photo. Take it again in good light and closer to the page.");
   if (e && e.code === "empty") return t("The AI did not give anything usable. Try again with a clearer photo or a topic.");
+  if (e && e.hint && appCheckText(e.hint, location.hostname)) return appCheckText(e.hint, location.hostname);
   if (/app.?check|appcheck\//i.test(String((e && e.message) || ""))) return t("App Check could not verify this website. In Google Cloud > Fraud Defense add \"{host}\" to the domains of your score-based key, and check that the same key is registered for the Web app in Firebase Console > App Check > Apps and is pasted in Settings. Then try again.", { host: location.hostname });
   if (/api.?not.?enabled|requires the firebase ai api/i.test(String((e && (e.code + " " + e.message)) || ""))) return t("Firebase AI Logic is not turned on in your Firebase project yet. Open Firebase Console > Build > AI Logic > Get started and choose the Gemini Developer API.");
   return ({
