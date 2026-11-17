@@ -3,7 +3,7 @@
 // Until it is on (or when a call fails) the Study pages answer with the built-in helper (lib-coach.js).
 import { cfg } from "./config.js";
 import { db } from "./lib-db.js";
-import { staffSystem, staffPrompt } from "./lib-practice.js";
+import { staffSystem, staffPrompt, tutorSystem, tutorPrompt, regenPrompt, cardsPrompt, REGEN_SYSTEM, CARDS_SYSTEM, MCQ_SCHEMA, ONE_SCHEMA, CARDS_SCHEMA } from "./lib-practice.js";
 
 const SDK = "12.14.0", CDN = "https://www.gstatic.com/firebasejs/" + SDK + "/";
 export const DEFAULT_MODEL = "gemini-3.8-flash";
@@ -21,7 +21,7 @@ export async function aiConfig(force = false) {
   ct = Date.now();
   return C;
 }
-export const dropAiConfig = () => { C = null; ct = 0; M = null; };
+export const dropAiConfig = () => { C = null; ct = 0; M = null; A = null; };
 const hook = () => (typeof window !== "undefined" && typeof window.__aiMock === "function" ? window.__aiMock : null);   // tests only
 export const aiReady = (c) => !!(c && c.on && (hook() || (c.appId && c.key)));
 
@@ -41,12 +41,15 @@ export function systemText({ inst, cls, subjects }) {
   ].filter(Boolean).join("\n");
 }
 
-let M = null;   // { key, model }: built once per configuration
+let M = null;   // { key, model }: built once per configuration, system text and generation settings
+let A = null;   // { key, ai, getGenerativeModel }: the Firebase app, App Check and AI of one configuration (made once; a model is cheap to make from it)
 const CHAT_GEN = { maxOutputTokens: 700, temperature: 0.5 };
-const STAFF_GEN = { maxOutputTokens: 8000, temperature: 0.4, responseMimeType: "application/json" };   // practice material: JSON, long
-async function load(c, system, gen = CHAT_GEN) {
-  const key = [c.appId, c.key, c.model, system, JSON.stringify(gen)].join("|");
-  if (M && M.key === key) return M.model;
+const STAFF_GEN = { maxOutputTokens: 16000, temperature: 0.4, responseMimeType: "application/json" };   // practice material: JSON, long (Bangla takes many tokens)
+const TUTOR_GEN = { maxOutputTokens: 600, temperature: 0.4 };
+const CARDS_GEN = { maxOutputTokens: 2000, temperature: 0.5, responseMimeType: "application/json", responseSchema: CARDS_SCHEMA };
+async function client(c) {
+  const key = c.appId + "|" + c.key;
+  if (A && A.key === key) return A;
   const [{ initializeApp, getApps, deleteApp }, { initializeAppCheck, ReCaptchaEnterpriseProvider }, { getAI, getGenerativeModel, GoogleAIBackend }] = await Promise.all([
     import(CDN + "firebase-app.js"), import(CDN + "firebase-app-check.js"), import(CDN + "firebase-ai.js"),
   ]);
@@ -54,8 +57,14 @@ async function load(c, system, gen = CHAT_GEN) {
   for (const a of getApps()) if (a.name === "ai") await deleteApp(a).catch(() => {});
   const app = initializeApp({ ...cfg, appId: c.appId }, "ai");
   initializeAppCheck(app, { provider: new ReCaptchaEnterpriseProvider(c.key), isTokenAutoRefreshEnabled: true });
-  const ai = getAI(app, { backend: new GoogleAIBackend() });
-  const model = getGenerativeModel(ai, { model: c.model, systemInstruction: system, generationConfig: gen });
+  A = { key, ai: getAI(app, { backend: new GoogleAIBackend() }), getGenerativeModel };
+  return A;
+}
+async function load(c, system, gen = CHAT_GEN) {
+  const key = [c.appId, c.key, c.model, system, JSON.stringify(gen)].join("|");
+  if (M && M.key === key) return M.model;
+  const a = await client(c);
+  const model = a.getGenerativeModel(a.ai, { model: c.model, systemInstruction: system, generationConfig: gen });
   M = { key, model };
   return model;
 }
@@ -69,6 +78,22 @@ export function aiProblem(e) {
   if (/safety|blocked|prohibited/.test(s)) return "blocked";
   if (/network|offline|failed to fetch|load failed|unavailable|\b5\d\d\b|dynamically imported|importing a module/.test(s)) return "net";
   return "other";
+}
+// A busy or unreachable AI is tried again after 1, 2 and 4 seconds (as ShikkhaAI does). Not tried again: a quota, a setup problem, a blocked answer, a timeout.
+const DELAYS = [1000, 2000, 4000];
+const transient = (e) => {
+  if (!e || e.code === "timeout" || e.code === "off") return false;
+  const s = ((e.code || "") + " " + (e.message || e)).toLowerCase();
+  return /unavailable|overload|high demand|\b5\d\d\b|network|failed to fetch|load failed|deadline|internal/.test(s) && !/quota|\b429\b|rate.?limit|safety|blocked/.test(s);
+};
+async function retrying(run) {
+  const delays = hook() ? [20, 40, 80] : DELAYS;   // the tests do not wait seconds
+  for (let i = 0; ; i++) {
+    try { return await run(); } catch (e) {
+      if (i >= delays.length || !transient(e)) throw e;
+      await new Promise((r) => setTimeout(r, delays[i]));
+    }
+  }
 }
 const race = (p, ms = TIMEOUT) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(Object.assign(new Error("The AI did not answer in time."), { code: "timeout" })), ms))]);
 
@@ -88,20 +113,70 @@ export async function askAI({ question, history = [], ctx = {}, inst = "Rise Edg
   return text;
 }
 
-// A teacher / admin asks for practice material from photos and / or a topic. images = [{ mime, data (base64) }]. Returns the answer text (JSON,
-// read with fromAi in lib-practice.js); throws on any problem. Only the class, subject, the teacher's words and the photos are sent: no student data.
-export async function askStaffAI({ task, cls = "", grp = "", subject = "", count = 10, text = "", images = [], inst = "Rise Edge Academy" }) {
+// A teacher / admin talks to the Co-Pilot: his words, photos, a PDF, a text file (up to 4 files) and / or his draft (task "mcq" makes a new set or changes the draft;
+// "short", "summary", "solve" make that; "regen" makes one question again). The system text, the message and the answer's schema are the ShikkhaAI Co-Pilot's (lib-practice.js).
+// files = [{ kind: "img" | "pdf" | "txt", name, mime, data (base64) | text }]; more = the teacher's choices (grade, dif, kind, level, lang, strict, draft) for staffPrompt, or { title, grade, dif, question, lang } for "regen".
+// Returns the answer text (JSON, read with fromAi in lib-practice.js); throws on any problem. Only the class, subject, the teacher's words, his draft and the files are sent: no student data.
+export async function askStaffAI({ task, cls = "", grp = "", subject = "", count = 10, text = "", files = [], inst = "Rise Edge Academy", ...more }) {
   const c = await aiConfig();
   if (!aiReady(c)) throw Object.assign(new Error("The AI is not turned on."), { code: "off" });
-  const system = staffSystem({ inst, cls, grp }), prompt = staffPrompt({ task, count, subject, text, photos: images.length });
+  const inline = files.filter((f) => f.data).slice(0, 4), docs = files.filter((f) => !f.data && f.text).slice(0, 4);
+  const regen = task === "regen";
+  const system = regen ? REGEN_SYSTEM : staffSystem({ inst, cls, grp, task, strict: more.strict, kind: more.kind, level: more.level, lang: more.lang });
+  const prompt = regen ? regenPrompt(more) : staffPrompt({ task, count, subject, text, ...more });
+  const schema = regen ? ONE_SCHEMA : task === "mcq" ? MCQ_SCHEMA : null;
   const h = hook();
-  if (h) return String(await h({ prompt, system, question: String(text || ""), task, images: images.length, json: true })).trim();
-  const model = await race(load(c, system, STAFF_GEN));
-  const parts = [{ text: prompt }, ...images.slice(0, 3).map((im) => ({ inlineData: { mimeType: im.mime || "image/jpeg", data: im.data } }))];
-  const res = await race(model.generateContent(parts), 90000);
-  const out = String(res.response.text() || "").trim();
-  if (!out) throw Object.assign(new Error("The AI returned nothing."), { code: "blocked" });
-  return out;
+  if (h) return String(await retrying(() => h({ prompt, system, question: String(regen ? more.question || "" : text || ""), task, images: inline.length, docs: docs.length, files: files.map((f) => f.kind), json: true, schema: !!schema }))).trim();
+  const parts = [
+    ...docs.map((f) => ({ text: "[Uploaded File: " + String(f.name || "file").slice(0, 80) + "]\n" + String(f.text).slice(0, 35000) + "\n[End of File]" })),
+    ...inline.map((f) => ({ inlineData: { mimeType: f.mime || "image/jpeg", data: f.data } })),
+    { text: prompt },
+  ];
+  const run = async (withSchema) => {
+    const model = await race(load(c, system, withSchema && schema ? { ...STAFF_GEN, responseSchema: schema } : STAFF_GEN));
+    const res = await race(model.generateContent(parts), 90000);
+    const out = String(res.response.text() || "").trim();
+    if (!out) throw Object.assign(new Error("The AI returned nothing."), { code: "blocked" });
+    return out;
+  };
+  try { return await retrying(() => run(true)); }
+  catch (e) {   // the SDK or the model did not like the schema: the same request again, with the format only described
+    if (schema && /schema|invalid.?argument|\b400\b/i.test(String((e && e.message) || e))) return await retrying(() => run(false));
+    throw e;
+  }
+}
+
+// A student asks about one question he got wrong. q = the question { q, o, a, e, h }, pick = the option he chose (-1 = none), doubt = his words.
+// Returns the answer text; throws on any problem. Sent: the question, his chosen answer and his words - no name, no phone.
+export async function askTutor({ q, pick = -1, doubt = "", cls = "", inst = "Rise Edge Academy" }) {
+  const c = await aiConfig();
+  if (!aiReady(c)) throw Object.assign(new Error("The AI is not turned on."), { code: "off" });
+  const system = tutorSystem({ inst, cls }), prompt = tutorPrompt({ q: q.q, o: q.o, pick, right: q.a, w: q.w, e: q.e, h: q.h, doubt });
+  const h = hook();
+  if (h) return String(await retrying(() => h({ prompt, system, question: String(doubt || ""), task: "tutor", json: false }))).trim();
+  return retrying(async () => {
+    const model = await race(load(c, system, TUTOR_GEN));
+    const res = await race(model.generateContent(prompt));
+    const out = String(res.response.text() || "").trim();
+    if (!out) throw Object.assign(new Error("The AI returned nothing."), { code: "blocked" });
+    return out;
+  });
+}
+
+// A student asks for revision flashcards of a topic (the AI Smart Flashcards of ShikkhaAI). Returns the answer text (a JSON list, read with cardsFrom); throws on any problem.
+export async function askCards({ topic, cls = "" }) {
+  const c = await aiConfig();
+  if (!aiReady(c)) throw Object.assign(new Error("The AI is not turned on."), { code: "off" });
+  const system = CARDS_SYSTEM + (cls ? "\nThe student is in " + cls + "." : ""), prompt = cardsPrompt(topic);
+  const h = hook();
+  if (h) return String(await retrying(() => h({ prompt, system, question: String(topic || ""), task: "cards", json: true, schema: true }))).trim();
+  return retrying(async () => {
+    const model = await race(load(c, system, CARDS_GEN));
+    const res = await race(model.generateContent(prompt));
+    const out = String(res.response.text() || "").trim();
+    if (!out) throw Object.assign(new Error("The AI returned nothing."), { code: "blocked" });
+    return out;
+  });
 }
 
 // the admin's "Test the AI" button: { ok, text | problem, detail }

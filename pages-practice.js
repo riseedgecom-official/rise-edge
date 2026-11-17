@@ -8,8 +8,9 @@ import { db } from "./lib-db.js";
 import { S, esc, t, page, act, onChange, onInput, pageState, refresh, go, isStaff, isTeacher, isStudent, addBN, fmtDate, dhakaDate, ago, activeStudents, T } from "./lib-core.js";
 import { icon, avatar, card, row, btn, empty, notice, tag, toast, form, info, ask, chips, meter, ring } from "./lib-ui.js";
 import { timeId, notify } from "./lib-svc.js";
-import { aiConfig, aiReady, askStaffAI, aiProblem } from "./lib-ai.js";
-import { blankMcq, blankShort, fromAi, cleanSet, scoreSet, setStats, MAX_Q, MAX_SQ, MAX_NOTES, LIM, TASKS } from "./lib-practice.js";
+import { aiConfig, aiReady, askStaffAI, askTutor, askCards, aiProblem } from "./lib-ai.js";
+import { withAiBudget } from "./pages-study.js";
+import { blankMcq, blankShort, fromAi, cardsFrom, mergeRefined, weakTopics, cleanSet, scoreSet, setStats, MAX_Q, MAX_SQ, MAX_NOTES, LIM, TASKS, DIFS, KINDS, LVLS, LANGS, COUNTS, DIF_LABEL, KIND_LABEL, LVL_LABEL, LANG_LABEL } from "./lib-practice.js";
 
 addBN({
   // menu and page names
@@ -23,6 +24,34 @@ addBN({
   "The AI is not set up correctly yet. Ask the admin to check Settings > AI study assistant.": "এআই এখনো ঠিকমতো সেট করা হয়নি। অ্যাডমিনকে সেটিংস > এআই পড়ার সহকারী দেখতে বলুন।",
   "The AI could not answer that. Change the photo or the words and try again.": "এআই এটার উত্তর দিতে পারেনি। ছবি বা লেখা বদলে আবার চেষ্টা করুন।",
   "The AI could not be reached (internet?).": "এআই এর সাথে যোগাযোগ করা যায়নি (ইন্টারনেট?)।",
+  // the new choices, files, changing the draft
+  "Photos or files (up to 4)": "ছবি বা ফাইল (সর্বোচ্চ ৪টি)", "PDF or text file": "পিডিএফ বা টেক্সট ফাইল", "Remove file": "ফাইল সরান",
+  "Up to 4 files.": "সর্বোচ্চ ৪টি ফাইল।", "Use a photo, a PDF or a text file.": "ছবি, পিডিএফ বা টেক্সট ফাইল দিন।", "That PDF is too big (4 MB at most).": "পিডিএফটি অনেক বড় (সর্বোচ্চ ৪ এমবি)।",
+  "Add a photo, a file or write a topic first.": "আগে একটি ছবি বা ফাইল যোগ করুন, অথবা বিষয় লিখুন।",
+  "Use the files": "ফাইল ব্যবহার", "Together with my words": "আমার লেখার সাথে", "Only what is in the files": "শুধু ফাইলে যা আছে",
+  "More options": "আরও অপশন", "How hard?": "কতটা কঠিন?", "Easy": "সহজ", "Medium": "মধ্যম", "Hard": "কঠিন", "Board exam standard": "বোর্ড পরীক্ষার মান",
+  "Kind of question": "প্রশ্নের ধরন", "Normal MCQ": "সাধারণ এমবিসিকিউ", "With a stimulus (উদ্দীপক)": "উদ্দীপকসহ", "True or false": "সত্য বা মিথ্যা",
+  "Thinking level": "চিন্তার স্তর", "All levels": "সব স্তর", "Knowledge (জ্ঞান)": "জ্ঞানমূলক", "Understanding (অনুধাবন)": "অনুধাবনমূলক", "Application (প্রয়োগ)": "প্রয়োগমূলক", "Higher order (উচ্চতর দক্ষতা)": "উচ্চতর দক্ষতা",
+  "You can write in Bangla, English or Banglish.": "বাংলা, ইংরেজি বা ব্যাংলিশে লিখতে পারেন।",
+  "The AI understood:": "এআই যা বুঝেছে:", "Undo the AI change": "এআই এর পরিবর্তন ফিরিয়ে নিন", "The AI change was undone.": "এআই এর পরিবর্তন ফিরিয়ে নেওয়া হয়েছে।", "Undo the AI change? Anything you changed by hand since then is lost too.": "এআই এর পরিবর্তন ফিরিয়ে নেবেন? এরপর আপনি নিজে যা বদলেছেন সেটিও হারিয়ে যাবে।",
+  "Ask the AI to change this set": "এআইকে দিয়ে এই সেট বদলান", "Write what to change first.": "আগে কী বদলাতে হবে তা লিখুন।", "Change": "বদলান",
+  "e.g. make question 2 harder, add 2 math questions, write the explanations in Bangla": "যেমন: ২ নম্বর প্রশ্ন কঠিন করুন, ২টি অঙ্কের প্রশ্ন যোগ করুন, ব্যাখ্যা বাংলায় লিখুন",
+  "Make the questions harder": "প্রশ্নগুলো আরও কঠিন করুন", "Add 2 more questions": "আরও ২টি প্রশ্ন যোগ করুন", "Write all explanations in simple Bangla": "সব ব্যাখ্যা সহজ বাংলায় লিখুন", "Add one question with a stimulus (উদ্দীপক)": "উদ্দীপকসহ একটি প্রশ্ন যোগ করুন",
+  "The AI changed the set ({a} to {b} questions). Check what changed.": "এআই সেটটি বদলেছে ({a}টি থেকে {b}টি প্রশ্ন)। কী বদলেছে দেখে নিন।", "The AI changed the set. Check what changed.": "এআই সেটটি বদলেছে। কী বদলেছে দেখে নিন।",
+  "Move up": "উপরে নিন", "Move down": "নিচে নিন", "Make this question again with the AI": "এআই দিয়ে এই প্রশ্নটি নতুন করে বানান", "The question was made again. Check it.": "প্রশ্নটি নতুন করে বানানো হয়েছে। যাচাই করুন।",
+  "Topic (optional), e.g. Newton's second law": "বিষয় (ঐচ্ছিক), যেমন: নিউটনের দ্বিতীয় সূত্র", "Topic": "টপিক",
+  // the AI Co-Pilot (the ShikkhaAI way): one chat for a new set and for changes, the choices, flashcards
+  "AI Co-Pilot": "এআই কো-পাইলট", "New topic": "নতুন বিষয়", "Count": "সংখ্যা", "Difficulty": "কাঠিন্য", "Question type": "প্রশ্নের ধরন", "Bloom's level": "ব্লুমের স্তর", "Language": "ভাষা", "Send": "পাঠান",
+  "Write in Banglish, Bangla or English, or upload a book page, notes or a PDF. The AI makes the questions, the common mistakes and the solutions. You check them before they go to students.": "ব্যাংলিশ, বাংলা বা ইংরেজিতে লিখুন, অথবা বইয়ের পাতা, নোট বা পিডিএফ দিন। এআই প্রশ্ন, সাধারণ ভুলের কারণ ও সমাধান বানাবে। শিক্ষার্থীদের কাছে যাওয়ার আগে আপনি যাচাই করবেন।",
+  "Assalamu alaikum! I am your AI Co-Pilot. Write in messy Banglish, in Bangla or English, or upload a book page, notes or a PDF, and I make the questions. For example: \"bhai class 9 physics er bol o goti niye 4ta math mcq banao banglay\"": "আসসালামু আলাইকুম! আমি আপনার এআই কো-পাইলট। এলোমেলো ব্যাংলিশ, বাংলা বা ইংরেজিতে লিখুন, অথবা বইয়ের পাতা, নোট বা পিডিএফ দিন, আমি প্রশ্ন বানিয়ে দেব। যেমন: \"bhai class 9 physics er bol o goti niye 4ta math mcq banao banglay\"",
+  "Try one in Banglish:": "ব্যাংলিশে একটি চেষ্টা করুন:", "Ask the AI to change the set:": "এআইকে দিয়ে সেট বদলান:", "Your words to the AI": "এআইকে আপনার কথা",
+  "e.g. \"2 number ta hard koro\"": "যেমন: \"2 number ta hard koro\"", "e.g. class 9 biology cell 5ta mcq": "যেমন: class 9 biology cell 5ta mcq",
+  "The AI is reading your words and files and making the questions...": "এআই আপনার লেখা ও ফাইল পড়ে প্রশ্ন বানাচ্ছে...", "Make important questions from the uploaded files.": "আপলোড করা ফাইল থেকে গুরুত্বপূর্ণ প্রশ্ন বানাও।",
+  "{n} questions are ready. Check them below and send them to the batch.": "{n}টি প্রশ্ন তৈরি। নিচে যাচাই করে ব্যাচে পাঠান।", "Why students get this wrong (optional)": "শিক্ষার্থীরা কেন ভুল করে (ঐচ্ছিক)", "Why students get this wrong": "শিক্ষার্থীরা কেন ভুল করে",
+  "The AI could not answer right now. Remember simply: the right answer is \"{a}\". Reason: {r}": "এআই এখন উত্তর দিতে পারেনি। সহজভাবে মনে রাখুন: সঠিক উত্তর \"{a}\"। কারণ: {r}", "The AI could not answer right now. Remember simply: the right answer is \"{a}\".": "এআই এখন উত্তর দিতে পারেনি। সহজভাবে মনে রাখুন: সঠিক উত্তর \"{a}\"।",
+  "AI revision cards": "এআই রিভিশন কার্ড", "Write a topic and the AI makes 4 short cards for revision. Tap a card to see the other side.": "একটি টপিক লিখুন, এআই রিভিশনের জন্য ৪টি ছোট কার্ড বানাবে। উল্টো পিঠ দেখতে কার্ডে চাপুন।",
+  "e.g. Organic chemistry / Tense": "যেমন: জৈব রসায়ন / Tense", "Make 4 cards": "৪টি কার্ড বানান", "Write a topic first.": "আগে একটি টপিক লিখুন।", "New revision cards are ready.": "নতুন রিভিশন কার্ড তৈরি।",
+  "The AI could not make the cards right now. Try again later.": "এআই এখন কার্ড বানাতে পারেনি। পরে আবার চেষ্টা করুন।", "Answer": "উত্তর", "Question": "প্রশ্ন", "AI can be wrong. Check important facts with your teacher or your book.": "এআই ভুল করতে পারে। গুরুত্বপূর্ণ তথ্য শিক্ষক বা বইয়ের সাথে মিলিয়ে নিন।",
   // checking a set
   "Write a title for the set.": "সেটের একটি শিরোনাম লিখুন।", "Question {n} has no text.": "প্রশ্ন {n} এ কোনো লেখা নেই।", "Question {n} needs at least 2 options.": "প্রশ্ন {n} এ অন্তত ২টি অপশন লাগবে।",
   "Question {n}: tick the right answer, and it must not be an empty option.": "প্রশ্ন {n}: সঠিক উত্তরে টিক দিন, আর সেটি ফাঁকা অপশন হতে পারবে না।", "Question {n} has two equal options.": "প্রশ্ন {n} এ দুটি অপশন একই।",
@@ -40,10 +69,10 @@ addBN({
   "Turn it on in Settings > AI study assistant. Until then you can write questions by hand below.": "সেটিংস > এআই পড়ার সহকারী থেকে চালু করুন। ততক্ষণ নিচে নিজে প্রশ্ন লিখতে পারেন।",
   "Ask the admin to turn it on. Until then you can write questions by hand below.": "অ্যাডমিনকে চালু করতে বলুন। ততক্ষণ নিচে নিজে প্রশ্ন লিখতে পারেন।", "Ask the AI": "এআইকে বলুন",
   "Take a photo of a book page, a question paper or your notes, or write a topic. The AI makes a first draft and you check it before it goes to students.": "বইয়ের পাতা, প্রশ্নপত্র বা নোটের ছবি তুলুন, অথবা একটি বিষয় লিখুন। এআই প্রথম খসড়া বানাবে, শিক্ষার্থীদের কাছে যাওয়ার আগে আপনি যাচাই করবেন।",
-  "e.g. Physics": "যেমন: পদার্থবিজ্ঞান", "Photos (up to 3)": "ছবি (সর্বোচ্চ ৩টি)", "Take photo": "ছবি তুলুন", "Choose photo": "ছবি বাছুন", "Remove photo": "ছবি সরান",
+  "e.g. Physics": "যেমন: পদার্থবিজ্ঞান", "Take photo": "ছবি তুলুন", "Choose photo": "ছবি বাছুন", "Remove photo": "ছবি সরান",
   "Topic or instruction (optional)": "বিষয় বা নির্দেশ (ঐচ্ছিক)", "e.g. Chapter 3, Newton's laws, make it a bit hard": "যেমন: তৃতীয় অধ্যায়, নিউটনের সূত্র, একটু কঠিন করুন", "What should the AI make?": "এআই কী বানাবে?", "How many questions?": "কয়টি প্রশ্ন?",
-  "The AI is working...": "এআই কাজ করছে...", "Make a draft": "খসড়া বানান", "Photos and your words go to Google's AI. Do not include students' names or phone numbers.": "ছবি ও আপনার লেখা গুগলের এআই এর কাছে যায়। শিক্ষার্থীদের নাম বা ফোন নম্বর দেবেন না।",
-  "Up to 3 photos.": "সর্বোচ্চ ৩টি ছবি।", "That file is not a photo.": "এই ফাইল ছবি নয়।", "Add a photo or write a topic first.": "আগে একটি ছবি যোগ করুন বা বিষয় লিখুন।",
+  "The AI is working...": "এআই কাজ করছে...", "Make a draft": "খসড়া বানান", "Photos, files and your words go to Google's AI. Do not include students' names or phone numbers.": "ছবি, ফাইল ও আপনার লেখা গুগলের এআই এর কাছে যায়। শিক্ষার্থীদের নাম বা ফোন নম্বর দেবেন না।",
+  
   "You used today's {n} AI requests. Try again tomorrow, or write the questions by hand.": "আজকের {n}টি এআই অনুরোধ শেষ। কাল আবার চেষ্টা করুন, অথবা নিজে প্রশ্ন লিখুন।",
   "{n} questions added. Check every answer before you send.": "{n}টি প্রশ্ন যোগ হয়েছে। পাঠানোর আগে প্রতিটি উত্তর যাচাই করুন।", "Notes added. Read them before you send.": "নোট যোগ হয়েছে। পাঠানোর আগে পড়ে নিন।",
   "At most {n} questions.": "সর্বোচ্চ {n}টি প্রশ্ন।", "At most {n} short questions.": "সর্বোচ্চ {n}টি ছোট প্রশ্ন।", "Delete this question?": "এই প্রশ্নটি মুছবেন?", "Clear the whole set and start again?": "পুরো সেট মুছে নতুন করে শুরু করবেন?",
@@ -61,6 +90,12 @@ addBN({
   "Not tried": "চেষ্টা করেনি", "Students will not see it any more, and their tries are removed.": "শিক্ষার্থীরা আর এটি দেখবে না, এবং তাদের চেষ্টাগুলোও মুছে যাবে।", "Delete this set?": "এই সেটটি মুছবেন?",
   "It could not be deleted. Only the teacher who made a set (or the admin) can delete it.": "মোছা যায়নি। সেটটি যিনি বানিয়েছেন সেই শিক্ষক (বা অ্যাডমিন) ছাড়া কেউ মুছতে পারবেন না।", "Deleted.": "মুছে ফেলা হয়েছে।",
   "{n} question": "{n}টি প্রশ্ন", "{n} questions": "{n}টি প্রশ্ন",
+  // the student: topics and the AI tutor
+  "Topic: {n}": "টপিক: {n}", "Revise these topics:": "এই টপিকগুলো আবার পড়ুন:", "Ask the AI about this": "এআইকে জিজ্ঞেস করুন", "Ask": "জিজ্ঞেস করুন",
+  "e.g. Please explain it in an easier way": "যেমন: আরও সহজ করে বুঝিয়ে দিন", "Write your question first.": "আগে আপনার প্রশ্ন লিখুন।",
+  "AI answers can be wrong. If you think the marked answer is wrong, tap \"This answer looks wrong\".": "এআই এর উত্তর ভুল হতে পারে। চিহ্নিত উত্তরটি ভুল মনে হলে \"এই উত্তর ভুল মনে হচ্ছে\" চাপুন।",
+  "The AI could not answer right now. Read the explanation above, or try again later.": "এআই এখন উত্তর দিতে পারেনি। ওপরের ব্যাখ্যাটি পড়ুন, অথবা পরে আবার চেষ্টা করুন।",
+  "You used today's {n} AI messages. Try again tomorrow.": "আজকের {n}টি এআই বার্তা শেষ। কাল আবার চেষ্টা করুন।", "AI tutor": "এআই শিক্ষক", "You": "আপনি",
   // the student
   "Questions your teachers send to your batch. Solve them, see what went wrong and why. These are for practice: the marks are not added to your exams.": "শিক্ষকরা আপনার ব্যাচে যে প্রশ্ন পাঠান। সমাধান করুন, কী ভুল হলো ও কেন তা দেখুন। এগুলো অনুশীলনের জন্য: নম্বর আপনার পরীক্ষায় যোগ হয় না।",
   "No practice sets yet. Your teachers will send them here.": "এখনো কোনো অনুশীলন সেট নেই। শিক্ষকরা এখানে পাঠাবেন।", "You are not in a batch yet.": "আপনি এখনো কোনো ব্যাচে নেই।", "New": "নতুন",
@@ -95,8 +130,11 @@ function draft() {
   if (!Array.isArray(D.sq)) D.sq = [];
   return D;
 }
+const clearAi = () => Object.assign(pageState("pr"), { ph: [], undo: null, chat: [], tx: "" });   // the files, the chat with the AI and the undo of the last AI change
 const keep = () => { try { localStorage.setItem(dkey(), JSON.stringify(D)); } catch (e) { /* private mode: the draft stays while the app is open */ } };
 const reset = () => { D = blankD(); Dpid = S.pid; keep(); };
+// before the AI changes the draft: what it looks like now, so that the teacher can take the change back
+const snap = () => { const d = draft(); return JSON.stringify({ ti: d.ti, nt: d.nt, qs: d.qs, sq: d.sq, ai: d.ai }); };
 
 // requests to the AI a day (this phone): the AI of the whole school shares one free quota, so a runaway tap is stopped here
 const DAILY = 40;
@@ -110,6 +148,24 @@ async function subjectNames(cls) {
     const c = SYL[cls] || {};
     return [...new Set(Object.values(c).filter(Array.isArray).flat().map((x) => x.s))];
   } catch (e) { return []; }
+}
+
+// up to 4 files; a PDF: at most 4 MB (it is sent as it is); a text file: the first 35 000 characters
+const MAX_FILES = 4, MAX_PDF = 4 * 1024 * 1024, MAX_TXT = 35000;
+const readAs = (file, how) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(new Error("read")); r[how](file); });
+async function takeFile(f) {
+  const name = String(f.name || "file").slice(0, 60), type = String(f.type || "").toLowerCase(), ext = (name.split(".").pop() || "").toLowerCase();
+  if (type.startsWith("image/")) return { kind: "img", name, ...(await shrink(f)) };
+  if (type === "application/pdf" || ext === "pdf") {
+    if (f.size > MAX_PDF) throw Object.assign(new Error("big"), { code: "big" });
+    return { kind: "pdf", name, mime: "application/pdf", data: String(await readAs(f, "readAsDataURL")).split(",")[1] };
+  }
+  if (type.startsWith("text/") || ["txt", "md", "csv"].includes(ext)) {
+    const text = String(await readAs(f, "readAsText")).slice(0, MAX_TXT).trim();
+    if (!text) throw new Error("empty");
+    return { kind: "txt", name, text };
+  }
+  throw new Error("kind");
 }
 
 // a photo: shrunk in the phone (the longest side 1280 px, JPEG) so that it is small to send and cheap for the AI
@@ -147,30 +203,48 @@ const PROB = {
 };
 
 // ================= teacher / admin: AI assistant =================
-const mcqCard = (x, i, flags) => `<div class="pq" id="pq-m${i}">
-  <div class="pq-h"><b>${esc(t("Question {n}", { n: i + 1 }))}</b>${flags ? tag(t("{n} reported", { n: flags }), "warn") : ""}<button type="button" class="btn btn--xs btn--bad" data-act="pr-delq" data-arg="m:${i}" aria-label="${esc(t("Delete"))}">${icon("trash")}</button></div>
+// the buttons of a question: up, down, make it again with the AI, delete
+const qTools = (k, i, len, ready, busy) => `<button type="button" class="btn btn--xs pq-up" data-act="pr-mv" data-arg="${k}:${i}:-1" aria-label="${esc(t("Move up"))}" ${i === 0 ? "disabled" : ""}>${icon("down")}</button><button type="button" class="btn btn--xs" data-act="pr-mv" data-arg="${k}:${i}:1" aria-label="${esc(t("Move down"))}" ${i === len - 1 ? "disabled" : ""}>${icon("down")}</button>${ready ? `<button type="button" class="btn btn--xs" data-act="pr-regen" data-arg="${k}:${i}" aria-label="${esc(t("Make this question again with the AI"))}" ${busy ? "disabled" : ""}>${icon("refresh")}</button>` : ""}<button type="button" class="btn btn--xs btn--bad" data-act="pr-delq" data-arg="${k}:${i}" aria-label="${esc(t("Delete"))}">${icon("trash")}</button>`;
+const mcqCard = (x, i, flags, len, ready, busy) => `<div class="pq" id="pq-m${i}">
+  <div class="pq-h"><b>${esc(t("Question {n}", { n: i + 1 }))}</b>${x.b ? `<span class="pq-topic">${esc(x.b)}</span>` : ""}${flags ? tag(t("{n} reported", { n: flags }), "warn") : ""}${qTools("m", i, len, ready, busy)}</div>
   <textarea rows="2" maxlength="${LIM.q}" data-input="pr-q" data-arg="m:${i}:q" placeholder="${esc(t("The question"))}">${esc(x.q)}</textarea>
+  <input type="text" class="pq-c" maxlength="${LIM.c}" data-input="pr-q" data-arg="m:${i}:c" value="${esc(x.c || "")}" placeholder="${esc(t("Topic (optional), e.g. Newton's second law"))}" aria-label="${esc(t("Topic"))}">
   <div class="pq-o">${[0, 1, 2, 3].map((j) => `<label class="pq-opt ${x.a === j ? "ok" : ""}"><input type="radio" name="ans-${i}" value="${j}" data-change="pr-ans" data-arg="${i}" ${x.a === j ? "checked" : ""} aria-label="${esc(t("Right answer"))}"><input type="text" maxlength="${LIM.opt}" data-input="pr-q" data-arg="m:${i}:o:${j}" value="${esc((x.o || [])[j] || "")}" placeholder="${esc(t("Option {n}", { n: j + 1 }))}"></label>`).join("")}</div>
   <small class="mut">${esc(t("Tick the right answer."))}</small>
   <textarea rows="2" maxlength="${LIM.ex}" data-input="pr-q" data-arg="m:${i}:e" placeholder="${esc(t("Why is this the right answer? Students read it after they solve."))}">${esc(x.e || "")}</textarea>
+  <textarea rows="2" maxlength="${LIM.why}" data-input="pr-q" data-arg="m:${i}:w" placeholder="${esc(t("Why students get this wrong (optional)"))}">${esc(x.w || "")}</textarea>
   <textarea rows="2" maxlength="${LIM.how}" data-input="pr-q" data-arg="m:${i}:h" placeholder="${esc(t("How to solve it (optional)"))}">${esc(x.h || "")}</textarea>
 </div>`;
-const shortCard = (x, i) => `<div class="pq" id="pq-s${i}">
-  <div class="pq-h"><b>${esc(t("Short question {n}", { n: i + 1 }))}</b><button type="button" class="btn btn--xs btn--bad" data-act="pr-delq" data-arg="s:${i}" aria-label="${esc(t("Delete"))}">${icon("trash")}</button></div>
+const shortCard = (x, i, len, ready, busy) => `<div class="pq" id="pq-s${i}">
+  <div class="pq-h"><b>${esc(t("Short question {n}", { n: i + 1 }))}</b>${qTools("s", i, len, ready, busy)}</div>
   <textarea rows="2" maxlength="${LIM.q}" data-input="pr-q" data-arg="s:${i}:q" placeholder="${esc(t("The question"))}">${esc(x.q)}</textarea>
   <textarea rows="3" maxlength="${LIM.ans}" data-input="pr-q" data-arg="s:${i}:a" placeholder="${esc(t("The model answer"))}">${esc(x.a)}</textarea>
 </div>`;
 
-function draftCard(d, flagsOf) {
-  const n = d.qs.length + d.sq.length, edit = !!d.editId;
+// the Co-Pilot: its first words, the example commands (the same as ShikkhaAI's: a first command, and changes to a draft), the chat
+const CHIPS_NEW = ["bhai class 9 physics bol o goti niye 4ta math mcq banao banglay", "photosynthesis niye 4ta tricky mcq banao jate student confuse hoy", "english grammar tense theke 5ta tricky question dao"];
+const CHIPS_EDIT = ["2 number question ta ektu hard koro", "aro 2ta math problem add koro", "shob banglay translate koro", "uddipok (scenario) add koro"];
+const chatHtml = (u) => {
+  const msgs = [{ text: t("Assalamu alaikum! I am your AI Co-Pilot. Write in messy Banglish, in Bangla or English, or upload a book page, notes or a PDF, and I make the questions. For example: \"bhai class 9 physics er bol o goti niye 4ta math mcq banao banglay\"") }, ...(u.chat || [])];
+  return msgs.map((m) => `<div class="pr-msg ${m.me ? "me" : "ai"}${m.err ? " err" : ""}">
+    ${m.files && m.files.length ? `<div class="pr-msg-f">${m.files.map((n) => `<span>${icon("file")}${esc(n)}</span>`).join("")}</div>` : ""}
+    ${m.badge ? `<div class="pr-badge">${icon("spark")} <b>${esc(t("The AI understood:"))}</b> ${esc(m.badge)}</div>` : ""}
+    <div>${esc(m.text).replace(/\n/g, "<br>")}</div></div>`).join("") +
+    (u.busy ? `<div class="pr-msg ai"><div>${icon("refresh")} ${esc(t("The AI is reading your words and files and making the questions..."))}</div></div>` : "");
+};
+
+// ready of the AI; busy: a request is running; u: the page state (the undo of the last AI change)
+function draftCard(d, flagsOf, ready, u) {
+  const n = d.qs.length + d.sq.length, edit = !!d.editId, busy = !!u.busy;
   return `<section class="card stack-s" id="pr-draft">
     <div class="card-h"><h3>${esc(edit ? t("Edit this set") : t("Your set"))}</h3>${n ? tag(qWord(n), "info") : ""}</div>
     ${edit ? notice(esc(t("This set was sent to {b}. Students see your changes at once.", { b: batchName(d.bid) })), "info") : ""}
+    ${u.undo ? `<div>${btn(t("Undo the AI change"), "pr-undo", { sm: true, ic: "back" })}</div>` : ""}
     <label class="fld"><span>${esc(t("Title"))}</span><input type="text" maxlength="${LIM.ti}" value="${esc(d.ti)}" data-input="pr-f" data-arg="ti" placeholder="${esc(t("e.g. Physics chapter 3 practice"))}"></label>
     <label class="fld"><span>${esc(t("Notes (optional)"))}</span><textarea rows="${d.nt ? 6 : 3}" maxlength="${MAX_NOTES}" data-input="pr-f" data-arg="nt" placeholder="${esc(t("A summary or a solution students can read before they practise."))}">${esc(d.nt)}</textarea></label>
     ${n || d.nt ? "" : `<p class="mut">${esc(t("Nothing here yet. Ask the AI above, or add a question by hand."))}</p>`}
-    ${d.qs.map((x, i) => mcqCard(x, i, flagsOf ? flagsOf(x.id) : 0)).join("")}
-    ${d.sq.map(shortCard).join("")}
+    ${d.qs.map((x, i) => mcqCard(x, i, flagsOf ? flagsOf(x.id) : 0, d.qs.length, ready, busy)).join("")}
+    ${d.sq.map((x, i) => shortCard(x, i, d.sq.length, ready, busy)).join("")}
     <div class="row" style="gap:8px;flex-wrap:wrap">${btn(t("Add MCQ"), "pr-addq", { ic: "plus", sm: true })}${btn(t("Add short question"), "pr-adds", { ic: "plus", sm: true })}</div>
     <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:4px">
       <button type="button" class="btn btn--pri" data-act="${edit ? "pr-save" : "pr-send"}">${icon(edit ? "check" : "send")}${esc(edit ? t("Save changes") : t("Send to batch"))}</button>
@@ -185,34 +259,49 @@ page("aitools", async () => {
   const d = draft(), u = pageState("pr"), c = await aiConfig(), ready = aiReady(c), mine = myBatches();
   if (!d.cls) d.cls = (mine[0] && mine[0].cls) || "";
   if (!TASKS.includes(u.task)) u.task = "mcq";
-  u.cnt = u.cnt || 10; u.ph = u.ph || [];
+  if (!COUNTS.includes(u.cnt)) u.cnt = 4;
+  u.ph = u.ph || []; u.chat = u.chat || [];
+  if (!DIFS.includes(u.dif)) u.dif = "medium";
+  if (!KINDS.includes(u.kind)) u.kind = "mcq";
+  if (!LVLS.includes(u.lvl)) u.lvl = "mixed";
+  if (!LANGS.includes(u.lang)) u.lang = "auto";
+  if (u.src !== "strict") u.src = "mix";
   const names = await subjectNames(d.cls), flagsOf = d.editId ? await flagCounts(d) : null;
   const clsOpt = [["", t("Class")], ...[4, 5, 6, 7, 8, 9, 10, 11, 12].map((x) => [String(x), t("Class {n}", { n: x })])].map(([v, l]) => `<option value="${v}" ${v === String(d.cls) ? "selected" : ""}>${esc(l)}</option>`).join("");
   const kinds = [{ k: "mcq", label: t("MCQ questions") }, { k: "short", label: t("Short questions") }, { k: "summary", label: t("Summary notes") }, { k: "solve", label: t("Solve and explain") }];
-  const cnt = [5, 10, 15, 20, 30].map((x) => `<option value="${x}" ${x === u.cnt ? "selected" : ""}>${x}</option>`).join("");
+  const sel = (arg, cur, list) => `<select data-change="pr-opt" data-arg="${arg}">${list.map(([v, l]) => `<option value="${v}" ${String(v) === String(cur) ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+  const isQ = u.task === "mcq" || u.task === "short", hasDraft = d.qs.length > 0, started = hasDraft || d.sq.length || d.nt || u.chat.length;
+  const quick = u.task === "mcq" ? (hasDraft ? CHIPS_EDIT : CHIPS_NEW) : [];
   return `<div class="stack">
   ${ready ? "" : notice(`<b>${esc(t("The AI is not turned on yet."))}</b><br>${esc(isStaff() && !isTeacher() ? t("Turn it on in Settings > AI study assistant. Until then you can write questions by hand below.") : t("Ask the admin to turn it on. Until then you can write questions by hand below."))}`, "warn")}
-  <section class="card stack-s">
-    <div class="card-h"><h3>${esc(t("Ask the AI"))}</h3>${ready ? tag(t("AI on"), "ok") : ""}</div>
-    <p class="mut">${esc(t("Take a photo of a book page, a question paper or your notes, or write a topic. The AI makes a first draft and you check it before it goes to students."))}</p>
-    <div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+  <section class="card stack-s pr-co">
+    <div class="card-h"><h3>${esc(t("AI Co-Pilot"))}</h3><span class="row" style="gap:6px">${ready ? tag(t("AI on"), "ok") : ""}${started ? btn(t("New topic"), "pr-clear", { xs: true, ic: "plus" }) : ""}</span></div>
+    <p class="mut" style="margin:0">${esc(t("Write in Banglish, Bangla or English, or upload a book page, notes or a PDF. The AI makes the questions, the common mistakes and the solutions. You check them before they go to students."))}</p>
+    <div class="pr-set">
       <label class="fld"><span>${esc(t("Class"))}</span><select data-change="pr-cls">${clsOpt}</select></label>
       <label class="fld"><span>${esc(t("Subject"))}</span><input type="text" list="pr-sb" maxlength="${LIM.sb}" value="${esc(d.sb)}" data-input="pr-f" data-arg="sb" placeholder="${esc(t("e.g. Physics"))}"><datalist id="pr-sb">${names.map((x) => `<option value="${esc(x)}">`).join("")}</datalist></label>
+      ${isQ ? `<label class="fld"><span>${esc(t("Count"))}</span>${sel("cnt", u.cnt, COUNTS.map((x) => [x, String(x)]))}</label>
+      <label class="fld"><span>${esc(t("Difficulty"))}</span>${sel("dif", u.dif, DIFS.map((x) => [x, DIF_LABEL[x]]))}</label>` : ""}
+      ${u.task === "mcq" ? `<label class="fld pr-wide"><span>${esc(t("Question type"))}</span>${sel("kind", u.kind, KINDS.map((x) => [x, KIND_LABEL[x]]))}</label>
+      <label class="fld pr-wide"><span>${esc(t("Bloom's level"))}</span>${sel("lvl", u.lvl, LVLS.map((x) => [x, LVL_LABEL[x]]))}</label>` : ""}
+      <label class="fld pr-wide"><span>${esc(t("Language"))}</span>${sel("lang", u.lang, LANGS.map((x) => [x, LANG_LABEL[x]]))}</label>
     </div>
-    <div class="fld"><span>${esc(t("Photos (up to 3)"))}</span>
+    <div class="fld"><span>${esc(t("Photos or files (up to 4)"))}</span>
       <div class="row" style="gap:8px;flex-wrap:wrap">
         <label class="btn btn--sm" for="pr-cam">${icon("camera")}${esc(t("Take photo"))}</label><input id="pr-cam" type="file" accept="image/*" capture="environment" hidden data-change="pr-photo">
         <label class="btn btn--sm" for="pr-gal">${icon("image")}${esc(t("Choose photo"))}</label><input id="pr-gal" type="file" accept="image/*" multiple hidden data-change="pr-photo">
+        <label class="btn btn--sm" for="pr-doc">${icon("file")}${esc(t("PDF or text file"))}</label><input id="pr-doc" type="file" accept="application/pdf,.pdf,text/plain,.txt,.md,.csv" multiple hidden data-change="pr-photo">
       </div>
-      ${u.ph.length ? `<div class="pthumbs">${u.ph.map((p, i) => `<div class="pthumb"><img alt="" src="data:${p.mime};base64,${p.data}"><button type="button" data-act="pr-rm" data-arg="${i}" aria-label="${esc(t("Remove photo"))}">${icon("x")}</button></div>`).join("")}</div>` : ""}
+      ${u.ph.length ? `<div class="pthumbs">${u.ph.map((p, i) => `<div class="pthumb ${p.kind === "img" ? "" : "pthumb-doc"}" title="${esc(p.name || "")}">${p.kind === "img" ? `<img alt="" src="data:${p.mime};base64,${p.data}">` : `${icon("file")}<span>${esc(String(p.name || "").slice(0, 18))}</span>`}<button type="button" data-act="pr-rm" data-arg="${i}" aria-label="${esc(t("Remove file"))}">${icon("x")}</button></div>`).join("")}</div>
+      <label class="fld"><span>${esc(t("Use the files"))}</span>${sel("src", u.src, [["mix", t("Together with my words")], ["strict", t("Only what is in the files")]])}</label>` : ""}
     </div>
-    <label class="fld"><span>${esc(t("Topic or instruction (optional)"))}</span><textarea rows="2" maxlength="1000" data-input="pr-tx" placeholder="${esc(t("e.g. Chapter 3, Newton's laws, make it a bit hard"))}">${esc(u.tx || "")}</textarea></label>
     <div class="fld"><span>${esc(t("What should the AI make?"))}</span>${chips(kinds, u.task, "pr-task")}</div>
-    ${u.task === "mcq" || u.task === "short" ? `<label class="fld"><span>${esc(t("How many questions?"))}</span><select data-change="pr-cnt">${cnt}</select></label>` : ""}
-    <button type="button" class="btn btn--pri" data-act="pr-go" ${u.busy ? "disabled" : ""}>${icon("spark")}${esc(u.busy ? t("The AI is working...") : t("Make a draft"))}</button>
-    <small class="mut">${esc(t("Photos and your words go to Google's AI. Do not include students' names or phone numbers."))}</small>
+    ${quick.length ? `<div class="fld"><span>${esc(hasDraft ? t("Ask the AI to change the set:") : t("Try one in Banglish:"))}</span><div class="chips pr-fixchips">${quick.map((x, i) => `<button type="button" class="chip" data-act="pr-chip" data-arg="${i}" ${u.busy ? "disabled" : ""}>${esc(x)}</button>`).join("")}</div></div>` : ""}
+    <div class="pr-chat" id="pr-chat" aria-live="polite">${chatHtml(u)}</div>
+    <div class="chat-in"><textarea id="pr-tx" rows="2" maxlength="1000" data-input="pr-tx" placeholder="${esc(hasDraft && u.task === "mcq" ? t("e.g. \"2 number ta hard koro\"") : t("e.g. class 9 biology cell 5ta mcq"))}" aria-label="${esc(t("Your words to the AI"))}">${esc(u.tx || "")}</textarea><button type="button" class="btn btn--pri" data-act="pr-go" ${u.busy ? "disabled" : ""} aria-label="${esc(t("Send"))}">${icon("send")}${esc(t("Send"))}</button></div>
+    <small class="mut">${esc(t("Photos, files and your words go to Google's AI. Do not include students' names or phone numbers."))}</small>
   </section>
-  ${draftCard(d, flagsOf)}
+  ${draftCard(d, flagsOf, ready, u)}
   </div>`;
 }, { title: "AI assistant" });
 
@@ -241,41 +330,109 @@ onChange("pr-ans", (el) => {
   el.closest(".pq-o").querySelectorAll(".pq-opt").forEach((o, j) => o.classList.toggle("ok", j === x.a));
 });
 onChange("pr-cls", (el) => { draft().cls = el.value; keep(); refresh(); });
-onChange("pr-cnt", (el) => { pageState("pr").cnt = +el.value || 10; });
+onChange("pr-opt", (el) => {
+  const u = pageState("pr"), k = el.dataset.arg;
+  if (k === "cnt") u.cnt = +el.value || 4;
+  else if (k === "dif" || k === "kind" || k === "lvl" || k === "lang" || k === "src") u[k] = el.value;
+});
 act("pr-task", (el) => { pageState("pr").task = el.dataset.arg; refresh(); });
 onChange("pr-photo", async (el) => {
   const u = pageState("pr"), files = [...(el.files || [])];
   el.value = "";
   u.ph = u.ph || [];
   for (const f of files) {
-    if (u.ph.length >= 3) { toast(t("Up to 3 photos."), "bad"); break; }
-    try { u.ph.push(await shrink(f)); } catch (e) { toast(t("That file is not a photo."), "bad"); }
+    if (u.ph.length >= MAX_FILES) { toast(t("Up to 4 files."), "bad"); break; }
+    try { u.ph.push(await takeFile(f)); }
+    catch (e) { toast(e && e.code === "big" ? t("That PDF is too big (4 MB at most).") : t("Use a photo, a PDF or a text file."), "bad"); }
   }
   refresh();
 });
 act("pr-rm", (el) => { const u = pageState("pr"); u.ph.splice(+el.dataset.arg, 1); refresh(); });
 
-act("pr-go", async () => {
+// the AI may be asked: it is on, and this phone has not used up today's requests
+async function gate() {
+  if (!aiReady(await aiConfig())) { toast(t("The AI is not turned on yet."), "bad"); return false; }
+  if (used() >= DAILY) { toast(t("You used today's {n} AI requests. Try again tomorrow, or write the questions by hand.", { n: DAILY }), "bad"); return false; }
+  return true;
+}
+const inst = "Rise Edge Academy";
+const grade = (d) => (d.cls ? "Class " + d.cls : "");
+const toBottom = () => setTimeout(() => { const el = document.getElementById("pr-chat"); if (el) el.scrollTop = el.scrollHeight; }, 60);
+const say = (u, m) => { u.chat = [...(u.chat || []), m].slice(-30); };
+
+// One box for everything, as in ShikkhaAI's Co-Pilot: the teacher's words (Banglish too), the choices and the files go to the AI; when there is a draft already, it is sent
+// along and the AI changes it ("2 number ta hard koro", "aro 2ta math add koro", "shob banglay translate koro"), otherwise it makes a new one.
+async function send(raw) {
   const d = draft(), u = pageState("pr");
   if (u.busy) return;
-  if (!u.ph.length && !String(u.tx || "").trim()) return toast(t("Add a photo or write a topic first."), "bad");
-  if (!aiReady(await aiConfig())) return toast(t("The AI is not turned on yet."), "bad");
-  if (used() >= DAILY) return toast(t("You used today's {n} AI requests. Try again tomorrow, or write the questions by hand.", { n: DAILY }), "bad");
-  u.busy = true; refresh();
+  const text = String(raw == null ? u.tx || "" : raw).trim();
+  if (!u.ph.length && !text) return toast(t("Add a photo, a file or write a topic first."), "bad");
+  if (!(await gate())) return;
+  const cmd = text || "Make important questions from the uploaded files.", edit = u.task === "mcq" && d.qs.length > 0;
+  say(u, { me: true, text: text || t("Make important questions from the uploaded files."), files: u.ph.map((f) => f.name) });
+  u.tx = ""; u.busy = true; refresh(); toBottom();
   try {
-    const raw = await askStaffAI({ task: u.task, cls: d.cls || "", subject: d.sb, count: u.cnt, text: u.tx || "", images: u.ph, inst: "Rise Edge Academy" });
-    const r = fromAi(u.task, raw);
+    const out = await askStaffAI({ task: u.task, cls: d.cls || "", subject: d.sb, count: u.cnt, text: cmd, files: u.ph, grade: grade(d), dif: u.dif, kind: u.kind, level: u.lvl, lang: u.lang, strict: u.src === "strict", draft: edit ? { qs: d.qs } : null, inst });
+    const r = fromAi(u.task, out, edit);
     bump();
+    const before = snap(), a = d.qs.length;
     if (r.title && !d.ti) d.ti = r.title;
-    d.qs = [...d.qs, ...r.qs].slice(0, MAX_Q);
+    if (r.sb && !d.sb) d.sb = r.sb;
+    d.qs = (edit ? mergeRefined(d.qs, r.qs) : [...d.qs, ...r.qs]).slice(0, MAX_Q);
     d.sq = [...d.sq, ...r.sq].slice(0, MAX_SQ);
     if (r.nt) d.nt = ((d.nt ? d.nt + "\n\n" : "") + r.nt).slice(0, MAX_NOTES);
     d.ai = true; keep();
-    u.ph = [];
-    toast(r.qs.length || r.sq.length ? t("{n} questions added. Check every answer before you send.", { n: r.qs.length + r.sq.length }) : t("Notes added. Read them before you send."), "ok");
-    setTimeout(() => { const el = document.getElementById("pr-draft"); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); }, 350);
+    u.undo = before;
+    say(u, { text: r.say || (r.nt ? t("Notes added. Read them before you send.") : t("{n} questions are ready. Check them below and send them to the batch.", { n: r.qs.length + r.sq.length })), badge: r.und });
+    toast(r.nt && !r.qs.length && !r.sq.length ? t("Notes added. Read them before you send.")
+      : edit && a !== d.qs.length ? t("The AI changed the set ({a} to {b} questions). Check what changed.", { a, b: d.qs.length })
+      : edit ? t("The AI changed the set. Check what changed.") : t("{n} questions added. Check every answer before you send.", { n: r.qs.length + r.sq.length }), "ok");
+  } catch (e) {
+    say(u, { err: true, text: (e && e.say ? e.say + "\n" : "") + problemText(e) });
+    toast(problemText(e), "bad");
+  } finally { u.busy = false; refresh(); toBottom(); }
+}
+act("pr-go", () => send());
+act("pr-chip", (el) => { send((draft().qs.length ? CHIPS_EDIT : CHIPS_NEW)[+el.dataset.arg]); });
+act("pr-undo", async () => {
+  const u = pageState("pr");
+  if (!u.undo) return;
+  if (!(await ask(t("Undo the AI change? Anything you changed by hand since then is lost too."), { ok: t("Undo") }))) return;
+  try { Object.assign(draft(), JSON.parse(u.undo)); keep(); } catch (e) { return; }
+  u.undo = null;
+  refresh(); toast(t("The AI change was undone."), "ok");
+});
+
+// one question again, by the AI: a multiple-choice question with its own request (ShikkhaAI's), a true / false or a short question with the same topic
+act("pr-regen", async (el) => {
+  const [k, i] = el.dataset.arg.split(":"), d = draft(), u = pageState("pr"), L = k === "m" ? d.qs : d.sq, x = L[+i];
+  if (!x || u.busy || !(await gate())) return;
+  u.busy = true; refresh();
+  const two = k === "m" && (x.o || []).filter(Boolean).length === 2;
+  try {
+    let nx;
+    if (k === "m" && !two) {
+      const out = await askStaffAI({ task: "regen", cls: d.cls || "", files: u.ph, title: d.ti || d.sb || "", grade: grade(d), dif: u.dif, question: x.q, lang: u.lang, inst });
+      nx = fromAi("regen", out).qs[0];
+    } else {
+      const text = "Make ONE new question on the same topic as the set \"" + (d.ti || d.sb || "") + "\", a different question from this one: " + String(x.q).slice(0, 300) + (x.c ? " (topic: " + x.c + ")" : "");
+      const out = await askStaffAI({ task: k === "m" ? "mcq" : "short", cls: d.cls || "", subject: d.sb, count: 1, text, grade: grade(d), dif: u.dif, kind: two ? "tf" : "mcq", level: u.lvl, lang: u.lang, inst });
+      const r = fromAi(k === "m" ? "mcq" : "short", out);
+      nx = (k === "m" ? r.qs : r.sq)[0];
+    }
+    if (!nx) throw Object.assign(new Error("empty"), { code: "empty" });
+    bump();
+    const before = snap();
+    L[+i] = nx; d.ai = true; keep();
+    u.undo = before;
+    toast(t("The question was made again. Check it."), "ok");
   } catch (e) { toast(problemText(e), "bad"); }
   finally { u.busy = false; refresh(); }
+});
+act("pr-mv", (el) => {
+  const [k, i, dir] = el.dataset.arg.split(":"), d = draft(), L = k === "m" ? d.qs : d.sq, a = +i, b = a + (+dir);
+  if (!L[a] || !L[b]) return;
+  [L[a], L[b]] = [L[b], L[a]]; keep(); refresh();
 });
 
 act("pr-addq", () => { const d = draft(); if (d.qs.length >= MAX_Q) return toast(t("At most {n} questions.", { n: MAX_Q }), "bad"); d.qs.push(blankMcq()); keep(); refresh(); setTimeout(() => { const el = document.getElementById("pq-m" + (d.qs.length - 1)); if (el) { el.scrollIntoView({ block: "center" }); const f = el.querySelector("textarea"); if (f) f.focus({ preventScroll: true }); } }, 300); });
@@ -287,9 +444,9 @@ act("pr-delq", async (el) => {
 });
 act("pr-clear", async () => {
   if (!(await ask(t("Clear the whole set and start again?"), { danger: true, ok: t("Clear") }))) return;
-  reset(); pageState("pr").ph = []; refresh();
+  reset(); clearAi(); refresh();
 });
-act("pr-cancel", () => { reset(); go("psets"); });
+act("pr-cancel", () => { reset(); clearAi(); go("psets"); });
 
 const checked = () => {
   const d = draft(), { set, problems } = cleanSet(d);
@@ -315,7 +472,7 @@ act("pr-send", async () => {
         await db.set("ps/" + timeId(), { bid: b.id, ...set, by: S.pid, bn: S.me.name, d: now, u: now, ai: !!d.ai });
         notify("batch", t("New practice set: {ti}, from {n}", { ti: set.ti, n: S.me.name }), b.id);
       }
-      reset(); pageState("pr").ph = [];
+      reset(); clearAi();
       toast(to.length === 1 ? t("Sent to 1 batch.") : t("Sent to {n} batches.", { n: to.length }), "ok");
       go("psets");
     },
@@ -334,7 +491,7 @@ act("pr-save", async () => {
     await db.set("ps/" + d.editId, { bid: d.orig.bid, ...set, qs, by: d.orig.by, bn: d.orig.bn, d: d.orig.d, u: now, ai: !!d.orig.ai });
   } catch (e) { return toast(t("It could not be saved. Only the teacher who made a set (or the admin) can change it."), "bad"); }
   const id = d.editId;
-  reset(); toast(t("Saved. Students see the new version."), "ok");
+  reset(); clearAi(); toast(t("Saved. Students see the new version."), "ok");
   go("pset", { id });
 });
 
@@ -394,7 +551,7 @@ act("ps-edit", async (el) => {
   if (!set) return toast(t("This set was not found."), "bad");
   const pad = (o) => [...(o || []), "", "", "", ""].slice(0, 4);
   Object.assign(draft(), { ti: set.ti, sb: set.sb || "", cls: (S.B.find((b) => b.id === set.bid) || {}).cls || "", nt: set.nt || "", qs: (set.qs || []).map((q) => ({ ...q, o: pad(q.o), e: q.e || "", h: q.h || "" })), sq: (set.sq || []).map((q) => ({ ...q })), editId: set.id, bid: set.bid, ai: !!set.ai, orig: set });
-  keep(); go("aitools");
+  keep(); clearAi(); go("aitools");
 });
 act("ps-del", async (el) => {
   const set = await db.get("ps/" + el.dataset.arg);
@@ -429,8 +586,33 @@ page("practice", async () => {
   return `<div class="stack">
     <section class="card stack-s"><h3>${esc(t("Practice"))}</h3><p class="mut" style="margin:0">${esc(t("Questions your teachers send to your batch. Solve them, see what went wrong and why. These are for practice: the marks are not added to your exams."))}</p></section>
     ${sets.length ? `<div class="list">${rows}</div>` : card("", empty(me.bid ? t("No practice sets yet. Your teachers will send them here.") : t("You are not in a batch yet."), "inbox"))}
+    ${aiReady(await aiConfig()) ? cardsCard() : ""}
   </div>`;
 }, { title: "Practice" });
+// revision cards: the student writes a topic, the AI makes 4 cards (kept while the page is open, not saved). It uses his daily AI messages.
+const cardsCard = () => {
+  const c = pageState("cards"), cards = c.cards || [];
+  return `<section class="card stack-s"><div class="card-h"><h3>${esc(t("AI revision cards"))}</h3>${tag(t("AI on"), "ok")}</div>
+    <p class="mut" style="margin:0">${esc(t("Write a topic and the AI makes 4 short cards for revision. Tap a card to see the other side."))}</p>
+    <div class="chat-in"><input type="text" id="cd-topic" maxlength="120" data-input="cd-topic" value="${esc(c.topic || "")}" placeholder="${esc(t("e.g. Organic chemistry / Tense"))}" aria-label="${esc(t("Topic"))}"><button type="button" class="btn btn--pri" data-act="cd-go" ${c.busy ? "disabled" : ""}>${icon("spark")}${esc(c.busy ? t("The AI is working...") : t("Make 4 cards"))}</button></div>
+    ${cards.length ? `<div class="fcards">${cards.map((x, i) => { const b = !!(c.flip && c.flip[i]); return `<button type="button" class="fcard ${b ? "back" : ""}" data-act="cd-flip" data-arg="${i}" aria-pressed="${b}"><small>${esc(b ? t("Answer") : t("Question"))}</small><span>${esc(b ? x.back : x.front).replace(/\n/g, "<br>")}</span></button>`; }).join("")}</div>
+    <small class="mut">${esc(t("AI can be wrong. Check important facts with your teacher or your book."))}</small>` : ""}
+  </section>`;
+};
+onInput("cd-topic", (el) => { pageState("cards").topic = el.value; });
+act("cd-flip", (el) => { const c = pageState("cards"); c.flip = c.flip || {}; c.flip[el.dataset.arg] = !c.flip[el.dataset.arg]; refresh(); });
+act("cd-go", async () => {
+  const c = pageState("cards"), topic = String(c.topic || "").trim();
+  if (c.busy) return;
+  if (!topic) return toast(t("Write a topic first."), "bad");
+  c.busy = true; refresh();
+  try {
+    c.cards = await withAiBudget(async () => cardsFrom(await askCards({ topic, cls: S.me.cls ? "Class " + S.me.cls + (S.me.grp ? " " + S.me.grp : "") : "" })));
+    c.flip = {};
+    toast(t("New revision cards are ready."), "ok");
+  } catch (e) { toast(e && e.code === "limit" ? t("You used today's {n} AI messages. Try again tomorrow.", { n: e.lim }) : t("The AI could not make the cards right now. Try again later."), "bad"); }
+  finally { c.busy = false; refresh(); }
+});
 act("sv-open", (el) => { const u = pageState("solve"); u[el.dataset.arg] = {}; go("solve", { id: el.dataset.arg }); });
 act("sv-back", () => go("practice"));
 
@@ -457,28 +639,61 @@ page("solve", async (params) => {
       ${shorts}
       <section class="card stack-s"><div class="row" style="gap:8px;justify-content:space-between;align-items:center;flex-wrap:wrap"><span class="mut">${esc(t("Answered {a} of {n}", { a: done, n: set.qs.length }))}</span><button type="button" class="btn btn--pri" data-act="sv-submit">${icon("check")}${esc(t("Submit answers"))}</button></div><small class="mut">${esc(t("Practice only. The marks are not added to your exams."))}</small></section></div>`;
   }
-  const sc = scoreSet(set, st.tr.a), f = st.f || "all";
+  const sc = scoreSet(set, st.tr.a), f = st.f || "all", aiOn = aiReady(await aiConfig()), weak = weakTopics(set, sc.rows);
   const shown = sc.rows.filter((r) => f === "all" || (f === "bad" ? !r.ok : r.ok));
   const fl = st.tr.fl || {};
   const view = shown.map((r) => {
     const q = set.qs[r.i], right = r.ok;
-    return `<div class="pq ${right ? "is-ok" : "is-bad"}"><div class="pq-h"><b>${esc(t("Question {n}", { n: r.i + 1 }))}</b>${right ? tag(t("Correct"), "ok") : tag(r.pick < 0 ? t("Not answered") : t("Wrong"), "bad")}</div>
+    return `<div class="pq ${right ? "is-ok" : "is-bad"}"><div class="pq-h"><b>${esc(t("Question {n}", { n: r.i + 1 }))}</b>${right ? tag(t("Correct"), "ok") : tag(r.pick < 0 ? t("Not answered") : t("Wrong"), "bad")}${q.c ? `<span class="pq-topic">${esc(t("Topic: {n}", { n: q.c }))}</span>` : ""}${q.b ? `<span class="pq-topic">${esc(q.b)}</span>` : ""}</div>
       <div>${esc(q.q).replace(/\n/g, "<br>")}</div>
       <div class="pq-o">${q.o.map((o, j) => `<div class="pq-opt ${j === q.a ? "ok" : j === r.pick ? "bad" : ""}"><span class="pq-mk">${j === q.a ? "✓" : j === r.pick ? "✗" : "ABCD"[j]}</span><span>${esc(o)}</span></div>`).join("")}</div>
       ${right ? "" : `<p class="mut" style="margin:0">${esc(r.pick < 0 ? t("You did not answer this one.") : t("Your answer: {a}", { a: q.o[r.pick] }))}<br>${esc(t("Right answer: {a}", { a: q.o[q.a] }))}</p>`}
-      ${q.e ? `<div class="pq-why"><b>${esc(right ? t("Why this is right") : t("Why it was wrong"))}</b>${esc(q.e).replace(/\n/g, "<br>")}</div>` : ""}
+      ${!right && q.w ? `<div class="pq-why pq-wrong"><b>${esc(t("Why students get this wrong"))}</b>${esc(q.w).replace(/\n/g, "<br>")}</div>` : ""}
+      ${q.e ? `<div class="pq-why"><b>${esc(right || q.w ? t("Why this is right") : t("Why it was wrong"))}</b>${esc(q.e).replace(/\n/g, "<br>")}</div>` : ""}
       ${q.h ? `<div class="pq-why pq-how"><b>${esc(t("How to solve it"))}</b>${esc(q.h).replace(/\n/g, "<br>")}</div>` : ""}
-      <div>${fl[q.id] ? `<span class="mut sm">${icon("check")} ${esc(t("Reported to your teacher"))}</span> ${btn(t("Undo"), "sv-flag", { arg: q.id, xs: true })}` : btn(t("This answer looks wrong"), "sv-flag", { arg: q.id, xs: true, ic: "alert" })}</div></div>`;
+      <div class="row" style="gap:8px;flex-wrap:wrap">${fl[q.id] ? `<span class="mut sm">${icon("check")} ${esc(t("Reported to your teacher"))}</span> ${btn(t("Undo"), "sv-flag", { arg: q.id, xs: true })}` : btn(t("This answer looks wrong"), "sv-flag", { arg: q.id, xs: true, ic: "alert" })}${!right && aiOn ? btn(t("Ask the AI about this"), "sv-ask", { arg: q.id, xs: true, ic: "spark" }) : ""}</div>
+      ${!right && aiOn && st.ask === q.id ? tutorBox(st, q) : ""}</div>`;
   }).join("");
   const nBad = sc.total - sc.got;
   return `<div class="stack">${head}
-    <section class="card"><div class="sc">${ring(sc.pct, t("Score"), sc.pct >= 70 ? "var(--ok)" : sc.pct >= 40 ? "var(--warn)" : "var(--bad)", 88)}<div><b style="font-size:18px">${esc(t("You got {a} out of {n}", { a: sc.got, n: sc.total }))}</b><p class="mut" style="margin:4px 0 0">${esc(nBad ? t("{n} to learn from. Read why below.", { n: nBad }) : t("All correct. Well done!"))}</p><p class="mut sm" style="margin:4px 0 0">${esc(t("Practice only. The marks are not added to your exams."))}</p></div></div>
+    <section class="card"><div class="sc">${ring(sc.pct, t("Score"), sc.pct >= 70 ? "var(--ok)" : sc.pct >= 40 ? "var(--warn)" : "var(--bad)", 88)}<div><b style="font-size:18px">${esc(t("You got {a} out of {n}", { a: sc.got, n: sc.total }))}</b><p class="mut" style="margin:4px 0 0">${esc(nBad ? t("{n} to learn from. Read why below.", { n: nBad }) : t("All correct. Well done!"))}</p>${weak.length ? `<p style="margin:6px 0 0"><b>${esc(t("Revise these topics:"))}</b> ${esc(weak.join(", "))}</p>` : ""}<p class="mut sm" style="margin:4px 0 0">${esc(t("Practice only. The marks are not added to your exams."))}</p></div></div>
       <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:10px">${btn(t("Try again"), "sv-redo", { ic: "refresh", kind: "pri", sm: true })}</div></section>
     ${chips([{ k: "all", label: t("All") + " (" + sc.total + ")" }, { k: "bad", label: t("Wrong") + " (" + nBad + ")" }, { k: "ok", label: t("Correct") + " (" + sc.got + ")" }], f, "sv-filter")}
     ${view || card("", empty(t("Nothing here."), "inbox"))}
     ${shorts}</div>`;
 }, { title: "Practice" });
 
+// the AI tutor of one wrong question: his doubts and the answers (kept while the page is open; not saved)
+const tutorBox = (st, q) => {
+  const th = (st.tut && st.tut[q.id]) || [], busy = st.tbusy === q.id;
+  return `<div class="pq-ai stack-s">
+    ${th.map((m) => `<div class="pq-bub ${m.me ? "me" : "ai"}"><b>${esc(m.me ? t("You") : t("AI tutor"))}</b>${esc(m.text).replace(/\n/g, "<br>")}</div>`).join("")}
+    ${busy ? `<div class="pq-bub ai"><b>${esc(t("AI tutor"))}</b>${esc(t("The AI is working..."))}</div>` : ""}
+    <div class="chat-in"><textarea id="sv-doubt" rows="2" maxlength="300" placeholder="${esc(t("e.g. Please explain it in an easier way"))}" aria-label="${esc(t("Ask the AI about this"))}"></textarea><button type="button" class="btn btn--pri" data-act="sv-ask-go" data-arg="${esc(q.id)}" ${busy ? "disabled" : ""}>${icon("send")}${esc(t("Ask"))}</button></div>
+    <small class="mut">${esc(t("AI answers can be wrong. If you think the marked answer is wrong, tap \"This answer looks wrong\"."))}</small>
+  </div>`;
+};
+act("sv-ask", (el) => { const st = solveState(S.params.id); st.ask = st.ask === el.dataset.arg ? "" : el.dataset.arg; refresh(); });
+act("sv-ask-go", async (el) => {
+  const id = S.params.id, st = solveState(id), qid = el.dataset.arg, q = (st.set.qs || []).find((x) => x.id === qid), box = document.getElementById("sv-doubt");
+  const doubt = String(box ? box.value : "").trim();
+  if (!q || st.tbusy) return;
+  if (!doubt) return toast(t("Write your question first."), "bad");
+  st.tut = st.tut || {}; st.tut[qid] = [...(st.tut[qid] || []), { me: true, text: doubt }];
+  st.tbusy = qid; refresh();
+  const pick = Number.isInteger(st.tr && st.tr.a && st.tr.a[qid]) ? st.tr.a[qid] : -1;
+  try {
+    const text = await withAiBudget(() => askTutor({ q, pick, doubt, cls: S.me.cls ? "Class " + S.me.cls + (S.me.grp ? " " + S.me.grp : "") : "", inst: "Rise Edge Academy" }));
+    st.tut[qid].push({ text });
+  } catch (e) {
+    if (e && e.code === "limit") { st.tut[qid].pop(); toast(t("You used today's {n} AI messages. Try again tomorrow.", { n: e.lim }), "bad"); }
+    else {   // the teacher's own note instead (as ShikkhaAI does): the right answer and why
+      const why = q.h || q.e || q.w || "";
+      st.tut[qid].push({ fb: true, text: why ? t("The AI could not answer right now. Remember simply: the right answer is \"{a}\". Reason: {r}", { a: q.o[q.a], r: why }) : t("The AI could not answer right now. Remember simply: the right answer is \"{a}\".", { a: q.o[q.a] }) });
+    }
+  }
+  st.tbusy = ""; refresh();
+});
 act("sv-pick", (el) => {
   const [id, j] = el.dataset.arg.split(":"), st = solveState(S.params.id);
   st.a = st.a || {}; st.a[id] = +j;

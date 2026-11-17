@@ -110,6 +110,17 @@ async function writeSP() {
 }
 // saves one after the other, so two quick taps can never overwrite each other
 const persist = () => (saving = saving.then(writeSP).catch((e) => { console.error(e); toast(t("Could not save. Check the internet and try again."), "bad"); }));
+// One message of the student's daily AI allowance (the same count as the chat) for something outside the chat, like the tutor of a practice question.
+// run() is called only when there is allowance left; the message is counted only when run() worked.
+export async function withAiBudget(run) {
+  const cfg = await aiConfig();
+  if (!aiReady(cfg)) throw Object.assign(new Error("The AI is not turned on."), { code: "off" });
+  const d = await sp(), today = T(), used = d.ai && d.ai.d === today ? d.ai.n : 0;
+  if (used >= cfg.lim) throw Object.assign(new Error("daily limit"), { code: "limit", lim: cfg.lim });
+  const out = await run();
+  d.ai = { d: today, n: used + 1 }; await persist();
+  return out;
+}
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
 
 const first = () => String((S.me && (S.me.nick || S.me.name)) || "").split(" ")[0];
