@@ -74,7 +74,7 @@ export function aiProblem(e) {
   const s = ((e && (e.code || "")) + " " + ((e && e.message) || e || "")).toLowerCase();
   if (e && e.code === "timeout") return "net";
   if (/\b429\b|quota|resource.?exhausted|rate.?limit|too many/.test(s)) return "quota";
-  if (/app.?check|\b403\b|permission|api key|not.?found|\b404\b|disabled|not enabled|unauthor|forbidden|invalid.?argument|\b400\b/.test(s)) return "setup";
+  if (/app.?check|\b403\b|permission|api key|not.?found|\b404\b|disabled|not enabled|unauthor|forbidden|invalid.?argument|\b400\b|api.?not.?enabled|not.?enabled|requires the firebase ai api|enable this api|service.?disabled/.test(s)) return "setup";
   if (/safety|blocked|prohibited/.test(s)) return "blocked";
   if (/network|offline|failed to fetch|load failed|unavailable|\b5\d\d\b|dynamically imported|importing a module/.test(s)) return "net";
   return "other";
