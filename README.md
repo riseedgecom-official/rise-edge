@@ -97,9 +97,9 @@ Firebase → **Authentication → Settings → Authorized domains → Add domain
 ছাত্রদের **Study** মেনুতে পড়ার প্ল্যানার, ফোকাস টাইমার ও চ্যাট সহকারী আছে। সহকারী নিজের ফল ও উপস্থিতি দেখে পরামর্শ দেয় — এর জন্য কোনো সেটআপ লাগে না। যেকোনো পড়ার প্রশ্নের উত্তর (Gemini) চাইলে একবার এটা করুন:
 1. Firebase Console → Project settings → Your apps → **Web** অ্যাপ (</>) যোগ করুন (না থাকলে) এবং তার **App ID** কপি করুন (`1:…:web:…`)। Android এর App ID চলবে না।
 2. Firebase Console → Build → **AI Logic** → Get started → *Gemini Developer API* (ফ্রি প্ল্যান আছে)।
-3. Google Cloud → **reCAPTCHA Enterprise** → website key বানান এবং তাতে আপনার সাইটের ডোমেইন (যেমন `riseedgecom-official.github.io`, `https://` ছাড়া) যোগ করুন। Firebase Console → **App Check** → Web অ্যাপে reCAPTCHA Enterprise ও ওই key দিন।
+3. **google.com/recaptcha/admin** খুলে আপনার সাইটের ডোমেইন (যেমন `riseedgecom-official.github.io`, `https://` ছাড়া) দিয়ে **reCAPTCHA v3** ধরনের key বানান — একটি *Site key* ও একটি *Secret key* পাবেন। Firebase Console → **App Check** → Apps → Web অ্যাপে **reCAPTCHA v3** বেছে *Secret key* বসান।
 4. Google Cloud → APIs & Services → Credentials → ব্রাউজার API key সীমাবদ্ধ হলে **Firebase AI Logic API** অনুমতি দিন।
-5. অ্যাপে Settings → *AI study assistant*: App ID ও site key বসান, AI chat **On** করে Save, তারপর **Test the AI** চাপুন।
+5. অ্যাপে Settings → *AI study assistant*: App ID ও *Site key* (secret নয়) বসান, AI chat **On** করে Save, তারপর **Test the AI** চাপুন।
 ফ্রি প্ল্যানে দৈনিক সীমা আছে; প্রতি ছাত্রের দৈনিক বার্তার সীমা Settings থেকে ঠিক করা যায়। এআই বন্ধ বা সীমা শেষ হলে বিল্ট-ইন সহকারী উত্তর দেয়। ছাত্রের নাম, ফোন বা ঠিকানা Google এ যায় না — শুধু ক্লাস, গ্রুপ ও সবচেয়ে কম নম্বরের বিষয়ের নাম যায়।
 
 ### শিক্ষক / অ্যাডমিনের এআই সহকারী (অনুশীলন সেট)

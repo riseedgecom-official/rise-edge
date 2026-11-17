@@ -1,5 +1,5 @@
 // The real AI (Gemini) through Firebase AI Logic: optional. The admin turns it on in Settings > AI study assistant (config/ai).
-// There is no key in the app: Firebase AI Logic holds the Gemini access, App Check (reCAPTCHA Enterprise) proves the call comes from this site.
+// There is no key in the app: Firebase AI Logic holds the Gemini access, App Check (reCAPTCHA v3) proves the call comes from this site.
 // Until it is on (or when a call fails) the Study pages answer with the built-in helper (lib-coach.js).
 import { cfg } from "./config.js";
 import { db } from "./lib-db.js";
@@ -10,7 +10,7 @@ export const DEFAULT_MODEL = "gemini-3.8-flash";
 export const DEFAULT_LIMIT = 20;
 const TIMEOUT = 30000;
 
-// config/ai = { on, appId (a WEB app of this Firebase project), key (reCAPTCHA Enterprise site key), model, lim (messages per student per day) }
+// config/ai = { on, appId (a WEB app of this Firebase project), key (reCAPTCHA v3 SITE key), model, lim (messages per student per day) }
 let C = null, ct = 0;
 export async function aiConfig(force = false) {
   if (!force && C && Date.now() - ct < 120000) return C;
@@ -50,13 +50,13 @@ const CARDS_GEN = { maxOutputTokens: 2000, temperature: 0.5, responseMimeType: "
 async function client(c) {
   const key = c.appId + "|" + c.key;
   if (A && A.key === key) return A;
-  const [{ initializeApp, getApps, deleteApp }, { initializeAppCheck, ReCaptchaEnterpriseProvider, getToken }, { getAI, getGenerativeModel, GoogleAIBackend }] = await Promise.all([
+  const [{ initializeApp, getApps, deleteApp }, { initializeAppCheck, ReCaptchaV3Provider, getToken }, { getAI, getGenerativeModel, GoogleAIBackend }] = await Promise.all([
     import(CDN + "firebase-app.js"), import(CDN + "firebase-app-check.js"), import(CDN + "firebase-ai.js"),
   ]);
   // its own app: the web app id of this project (config.js may hold an Android id, which App Check cannot use)
   for (const a of getApps()) if (a.name === "ai") await deleteApp(a).catch(() => {});
   const app = initializeApp({ ...cfg, appId: c.appId }, "ai");
-  const check = initializeAppCheck(app, { provider: new ReCaptchaEnterpriseProvider(c.key), isTokenAutoRefreshEnabled: true });
+  const check = initializeAppCheck(app, { provider: new ReCaptchaV3Provider(c.key), isTokenAutoRefreshEnabled: true });
   // limited-use App Check tokens (SDK 12.14+): they are also accepted when "replay protection" is on in the Firebase Console
   A = { key, ai: getAI(app, { backend: new GoogleAIBackend(), useLimitedUseAppCheckTokens: true }), getGenerativeModel, check, getToken };
   return A;
