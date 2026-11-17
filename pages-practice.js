@@ -71,7 +71,7 @@ addBN({
   "Take a photo of a book page, a question paper or your notes, or write a topic. The AI makes a first draft and you check it before it goes to students.": "বইয়ের পাতা, প্রশ্নপত্র বা নোটের ছবি তুলুন, অথবা একটি বিষয় লিখুন। এআই প্রথম খসড়া বানাবে, শিক্ষার্থীদের কাছে যাওয়ার আগে আপনি যাচাই করবেন।",
   "e.g. Physics": "যেমন: পদার্থবিজ্ঞান", "Take photo": "ছবি তুলুন", "Choose photo": "ছবি বাছুন", "Remove photo": "ছবি সরান",
   "Topic or instruction (optional)": "বিষয় বা নির্দেশ (ঐচ্ছিক)", "e.g. Chapter 3, Newton's laws, make it a bit hard": "যেমন: তৃতীয় অধ্যায়, নিউটনের সূত্র, একটু কঠিন করুন", "What should the AI make?": "এআই কী বানাবে?", "How many questions?": "কয়টি প্রশ্ন?",
-  "The AI is working...": "এআই কাজ করছে...", "Details:": "বিস্তারিত:", "Firebase AI Logic is not turned on in your Firebase project yet. Open Firebase Console > Build > AI Logic > Get started and choose the Gemini Developer API.": "Firebase AI Logic আপনার Firebase প্রজেক্টে এখনো চালু করা হয়নি। Firebase Console > Build > AI Logic > Get started খুলে Gemini Developer API বেছে নিন।", "Make a draft": "খসড়া বানান", "Photos, files and your words go to Google's AI. Do not include students' names or phone numbers.": "ছবি, ফাইল ও আপনার লেখা গুগলের এআই এর কাছে যায়। শিক্ষার্থীদের নাম বা ফোন নম্বর দেবেন না।",
+  "The AI is working...": "এআই কাজ করছে...", "Details:": "বিস্তারিত:", "App Check could not verify this website. In Google Cloud > reCAPTCHA Enterprise add \"{host}\" to the allowed domains of your key, and in Firebase Console > App Check > Apps register the Web app with that same key. Then try again.": "App Check এই ওয়েবসাইটকে যাচাই করতে পারেনি। Google Cloud > reCAPTCHA Enterprise এ আপনার key-র অনুমোদিত ডোমেইনে \"{host}\" যোগ করুন, আর Firebase Console > App Check > Apps এ Web অ্যাপটি সেই একই key দিয়ে রেজিস্টার করুন। তারপর আবার চেষ্টা করুন।", "Firebase AI Logic is not turned on in your Firebase project yet. Open Firebase Console > Build > AI Logic > Get started and choose the Gemini Developer API.": "Firebase AI Logic আপনার Firebase প্রজেক্টে এখনো চালু করা হয়নি। Firebase Console > Build > AI Logic > Get started খুলে Gemini Developer API বেছে নিন।", "Make a draft": "খসড়া বানান", "Photos, files and your words go to Google's AI. Do not include students' names or phone numbers.": "ছবি, ফাইল ও আপনার লেখা গুগলের এআই এর কাছে যায়। শিক্ষার্থীদের নাম বা ফোন নম্বর দেবেন না।",
   
   "You used today's {n} AI requests. Try again tomorrow, or write the questions by hand.": "আজকের {n}টি এআই অনুরোধ শেষ। কাল আবার চেষ্টা করুন, অথবা নিজে প্রশ্ন লিখুন।",
   "{n} questions added. Check every answer before you send.": "{n}টি প্রশ্ন যোগ হয়েছে। পাঠানোর আগে প্রতিটি উত্তর যাচাই করুন।", "Notes added. Read them before you send.": "নোট যোগ হয়েছে। পাঠানোর আগে পড়ে নিন।",
@@ -185,6 +185,7 @@ const problemText = (e) => {
   if (e && e.code === "off") return t("The AI is not turned on yet.");
   if (e && e.code === "unreadable") return t("The AI could not read the photo. Take it again in good light and closer to the page.");
   if (e && e.code === "empty") return t("The AI did not give anything usable. Try again with a clearer photo or a topic.");
+  if (/app.?check|appcheck\//i.test(String((e && e.message) || ""))) return t("App Check could not verify this website. In Google Cloud > reCAPTCHA Enterprise add \"{host}\" to the allowed domains of your key, and in Firebase Console > App Check > Apps register the Web app with that same key. Then try again.", { host: location.hostname });
   if (/api.?not.?enabled|requires the firebase ai api/i.test(String((e && (e.code + " " + e.message)) || ""))) return t("Firebase AI Logic is not turned on in your Firebase project yet. Open Firebase Console > Build > AI Logic > Get started and choose the Gemini Developer API.");
   return ({
     quota: t("The AI is busy or its daily limit is reached. Try again later."),
@@ -194,7 +195,7 @@ const problemText = (e) => {
   })[aiProblem(e)] || t("The AI could not answer that. Change the photo or the words and try again.");
 };
 // the real reason, for the teacher / admin to read out or send as a screenshot (links are cut: they hold the project id)
-const errDetail = (e) => String(((e && e.code) ? e.code + ": " : "") + ((e && e.message) || e || "")).replace(/https?:\/\/\S+/g, "...").replace(/\s+/g, " ").trim().slice(0, 260);
+const errDetail = (e) => String(((e && e.code) ? e.code + ": " : "") + ((e && e.message) || e || "")).replace(/https?:\/\/\S+/g, "...").replace(/\s+/g, " ").trim().slice(0, 420);
 const PROB = {
   title: (p) => t("Write a title for the set."),
   q: (p) => t("Question {n} has no text.", { n: p.n }),

@@ -50,14 +50,15 @@ const CARDS_GEN = { maxOutputTokens: 2000, temperature: 0.5, responseMimeType: "
 async function client(c) {
   const key = c.appId + "|" + c.key;
   if (A && A.key === key) return A;
-  const [{ initializeApp, getApps, deleteApp }, { initializeAppCheck, ReCaptchaEnterpriseProvider }, { getAI, getGenerativeModel, GoogleAIBackend }] = await Promise.all([
+  const [{ initializeApp, getApps, deleteApp }, { initializeAppCheck, ReCaptchaEnterpriseProvider, getToken }, { getAI, getGenerativeModel, GoogleAIBackend }] = await Promise.all([
     import(CDN + "firebase-app.js"), import(CDN + "firebase-app-check.js"), import(CDN + "firebase-ai.js"),
   ]);
   // its own app: the web app id of this project (config.js may hold an Android id, which App Check cannot use)
   for (const a of getApps()) if (a.name === "ai") await deleteApp(a).catch(() => {});
   const app = initializeApp({ ...cfg, appId: c.appId }, "ai");
-  initializeAppCheck(app, { provider: new ReCaptchaEnterpriseProvider(c.key), isTokenAutoRefreshEnabled: true });
-  A = { key, ai: getAI(app, { backend: new GoogleAIBackend() }), getGenerativeModel };
+  const check = initializeAppCheck(app, { provider: new ReCaptchaEnterpriseProvider(c.key), isTokenAutoRefreshEnabled: true });
+  // limited-use App Check tokens (SDK 12.14+): they are also accepted when "replay protection" is on in the Firebase Console
+  A = { key, ai: getAI(app, { backend: new GoogleAIBackend(), useLimitedUseAppCheckTokens: true }), getGenerativeModel, check, getToken };
   return A;
 }
 async function load(c, system, gen = CHAT_GEN) {
@@ -79,6 +80,16 @@ export function aiProblem(e) {
   if (/network|offline|failed to fetch|load failed|unavailable|\b5\d\d\b|dynamically imported|importing a module/.test(s)) return "net";
   return "other";
 }
+// An App Check problem (HTTP 401 "token is invalid"): ask App Check itself why it could not make a token and add that to the error, so the real reason is on the screen.
+async function why(e) {
+  try {
+    const s = String((e && e.message) || e);
+    if (!/app.?check|\b401\b/i.test(s) || /\| App Check/.test(s) || !A || !A.check) return e;
+    try { await A.getToken(A.check, true); e.message = s + " | App Check made a token fine here: check that the Web app is registered in Firebase Console > App Check > Apps and that replay protection is not blocking it."; }
+    catch (x) { e.message = s + " | App Check: " + String((x && x.code) || "") + " " + String((x && x.message) || x).slice(0, 220); }
+  } catch (_) { /* the original error is thrown */ }
+  return e;
+}
 // A busy or unreachable AI is tried again after 1, 2 and 4 seconds (as ShikkhaAI does). Not tried again: a quota, a setup problem, a blocked answer, a timeout.
 const DELAYS = [1000, 2000, 4000];
 const transient = (e) => {
@@ -90,7 +101,7 @@ async function retrying(run) {
   const delays = hook() ? [20, 40, 80] : DELAYS;   // the tests do not wait seconds
   for (let i = 0; ; i++) {
     try { return await run(); } catch (e) {
-      if (i >= delays.length || !transient(e)) throw e;
+      if (i >= delays.length || !transient(e)) throw await why(e);
       await new Promise((r) => setTimeout(r, delays[i]));
     }
   }
@@ -183,6 +194,6 @@ export async function askCards({ topic, cls = "" }) {
 export async function testAI(c) {
   const saved = C; C = { ...c, on: true }; ct = Date.now(); M = null;
   try { const text = await askAI({ question: "Reply with the single word OK.", inst: "Rise Edge Academy" }); return { ok: true, text }; }
-  catch (e) { return { ok: false, problem: aiProblem(e), detail: String((e && e.message) || e).slice(0, 300) }; }
+  catch (e) { await why(e); return { ok: false, problem: aiProblem(e), detail: String((e && e.message) || e).slice(0, 420) }; }
   finally { C = saved; M = null; }
 }
