@@ -64,22 +64,35 @@ async function client(c) {
 }
 // THE SIMPLE WAY: Google's Gemini API with an API key from Google AI Studio (config/ai.gk). No Firebase AI Logic, no App Check, no Web app ID.
 // It answers like the SDK's model does (generateContent(parts) -> { response: { text() } }), so the rest of this file does not care which way is used.
+// When the chosen model is overloaded (503), has no quota left (429) or is not there for this key (404), the next model of this list answers instead (free-tier limits are per model).
+const FALLBACK_MODELS = ["gemini-3.5-flash-lite"];
 function direct(c, system, gen) {
+  const once = async (model, body) => {
+    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent",
+      { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": c.gk }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const er = (j && j.error) || {}, msg = er.message || r.statusText || "error";
+      throw Object.assign(new Error("[" + r.status + "] " + msg + (er.status ? " (" + er.status + ")" : "")), { code: "gemini/" + r.status, other: [404, 429, 500, 502, 503, 504].includes(r.status) || /high demand|overloaded|unavailable/i.test(msg) });
+    }
+    const cand = (j.candidates || [])[0] || {};
+    const text = ((cand.content && cand.content.parts) || []).filter((p) => p && typeof p.text === "string" && !p.thought).map((p) => p.text).join("");
+    if (!text) {
+      const why = (j.promptFeedback && j.promptFeedback.blockReason) || cand.finishReason || "";
+      throw new Error(why ? "Response was blocked due to " + why : "The AI gave an empty answer");
+    }
+    return { response: { text: () => text } };
+  };
   return {
     async generateContent(parts) {
       const body = { contents: [{ role: "user", parts: (Array.isArray(parts) ? parts : [parts]).map((p) => (typeof p === "string" ? { text: p } : p)) }], generationConfig: gen };
       if (system) body.systemInstruction = { parts: [{ text: system }] };
-      const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(c.model) + ":generateContent",
-        { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": c.gk }, body: JSON.stringify(body) });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) { const er = (j && j.error) || {}; throw Object.assign(new Error("[" + r.status + "] " + (er.message || r.statusText || "error") + (er.status ? " (" + er.status + ")" : "")), { code: "gemini/" + r.status }); }
-      const cand = (j.candidates || [])[0] || {};
-      const text = ((cand.content && cand.content.parts) || []).filter((p) => p && typeof p.text === "string" && !p.thought).map((p) => p.text).join("");
-      if (!text) {
-        const why = (j.promptFeedback && j.promptFeedback.blockReason) || cand.finishReason || "";
-        throw new Error(why ? "Response was blocked due to " + why : "The AI gave an empty answer");
+      let first;
+      for (const m of [c.model, ...FALLBACK_MODELS.filter((x) => x !== c.model)]) {
+        try { return await once(m, body); }
+        catch (e) { first = first || e; if (!e.other) throw e; }
       }
-      return { response: { text: () => text } };
+      throw first;     // the answer of the model the admin chose says most
     },
   };
 }
